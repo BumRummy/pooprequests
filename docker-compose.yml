@@ -1,0 +1,20 @@
+services:
+  pooprequests:
+    build: .
+    container_name: pooprequests
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      JELLYFIN_URL: ${JELLYFIN_URL:-http://jellyfin:8096}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      JELLYSEERR_URL: ${JELLYSEERR_URL:-http://jellyseerr:5055}
+      JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY:-}
+      LAZYLIBRARIAN_URL: ${LAZYLIBRARIAN_URL:-http://lazylibrarian:5299}
+      LAZYLIBRARIAN_API_KEY: ${LAZYLIBRARIAN_API_KEY:-}
+      LISTENARR_URL: ${LISTENARR_URL:-http://listenarr:8787}
+      LISTENARR_API_KEY: ${LISTENARR_API_KEY:-}
+
+networks:
+  default:
+    name: media-stack
