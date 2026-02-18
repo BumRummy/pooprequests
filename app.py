@@ -94,8 +94,17 @@ TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
 GOOGLE_BOOKS_ENDPOINT = "https://www.googleapis.com/books/v1/volumes"
 OPENLIBRARY_ENDPOINT = "https://openlibrary.org/search.json"
 
-JELLYSEERR_URL = os.getenv("JELLYSEERR_URL", "").rstrip("/")
-JELLYSEERR_API_KEY = os.getenv("JELLYSEERR_API_KEY", "")
+RADARR_URL = os.getenv("RADARR_URL", "").rstrip("/")
+RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
+RADARR_ROOT_FOLDER = os.getenv("RADARR_ROOT_FOLDER", "/movies")
+RADARR_QUALITY_PROFILE_ID = _parse_int_env("RADARR_QUALITY_PROFILE_ID", os.getenv("RADARR_QUALITY_PROFILE_ID", "1")) or 1
+RADARR_SEARCH_ON_ADD = os.getenv("RADARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
+SONARR_URL = os.getenv("SONARR_URL", "").rstrip("/")
+SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
+SONARR_ROOT_FOLDER = os.getenv("SONARR_ROOT_FOLDER", "/tv")
+SONARR_QUALITY_PROFILE_ID = _parse_int_env("SONARR_QUALITY_PROFILE_ID", os.getenv("SONARR_QUALITY_PROFILE_ID", "1")) or 1
+SONARR_LANGUAGE_PROFILE_ID = _parse_int_env("SONARR_LANGUAGE_PROFILE_ID", os.getenv("SONARR_LANGUAGE_PROFILE_ID", "1")) or 1
+SONARR_SEARCH_ON_ADD = os.getenv("SONARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
 LAZYLIBRARIAN_URL = os.getenv("LAZYLIBRARIAN_URL", "").rstrip("/")
 LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
 LISTENARR_URL = os.getenv("LISTENARR_URL", "").rstrip("/")
@@ -289,8 +298,10 @@ def request_item() -> Any:
     media_type = payload.get("mediaType")
     app.logger.info("Request submission media_type=%s id=%s", media_type, payload.get("id"))
 
-    if media_type in {"movies", "tv"}:
-        return send_to_jellyseerr(payload)
+    if media_type == "movies":
+        return send_to_radarr(payload)
+    if media_type == "tv":
+        return send_to_sonarr(payload)
     if media_type == "books":
         return send_to_lazylibrarian(payload)
     if media_type == "audiobooks":
@@ -299,45 +310,102 @@ def request_item() -> Any:
     return api_error("Unsupported media type", 400)
 
 
-def send_to_jellyseerr(item: dict[str, Any]) -> Any:
-    if not JELLYSEERR_URL or not JELLYSEERR_API_KEY:
-        return api_error("Jellyseerr is not configured", 400)
+def send_to_radarr(item: dict[str, Any]) -> Any:
+    if not RADARR_URL or not RADARR_API_KEY:
+        return api_error("Radarr is not configured", 400)
 
-    media_type = "movie" if item.get("mediaType") == "movies" else "tv"
     try:
         media_id = int(item.get("id"))
     except (TypeError, ValueError):
-        return api_error("Invalid media id for Jellyseerr request", 400, str(item.get("id")))
+        return api_error("Invalid movie id for Radarr request", 400, str(item.get("id")))
 
     payload: dict[str, Any] = {
-        "mediaType": media_type,
-        "mediaId": media_id,
+        "tmdbId": media_id,
+        "title": item.get("title") or "",
+        "qualityProfileId": RADARR_QUALITY_PROFILE_ID,
+        "rootFolderPath": RADARR_ROOT_FOLDER,
+        "monitored": True,
+        "addOptions": {"searchForMovie": RADARR_SEARCH_ON_ADD},
     }
 
-    app.logger.info("Submitting Jellyseerr payload media_type=%s media_id=%s", media_type, media_id)
+    app.logger.info("Submitting Radarr payload tmdb_id=%s", media_id)
 
     try:
         response = requests.post(
-            f"{JELLYSEERR_URL}/api/v1/request",
+            f"{RADARR_URL}/api/v3/movie",
             json=payload,
-            headers={"X-Api-Key": JELLYSEERR_API_KEY},
+            headers={"X-Api-Key": RADARR_API_KEY},
             timeout=12,
         )
     except requests.RequestException as exc:
-        return api_error("Jellyseerr request failed", 502, str(exc))
+        return api_error("Radarr request failed", 502, str(exc))
 
-    if response.status_code == 403:
-        return api_error(
-            "Jellyseerr rejected the request: your API key does not have request permission.",
-            403,
-            response_details(response),
-        )
+    if response.status_code == 409:
+        return api_error("Movie already exists or is already monitored in Radarr", 409, response_details(response))
 
     if response.status_code not in {200, 201}:
-        return api_error("Jellyseerr request failed", 400, response_details(response))
+        return api_error("Radarr request failed", 400, response_details(response))
 
-    app.logger.info("Request sent to Jellyseerr id=%s", item.get("id"))
-    return jsonify({"ok": True, "target": "jellyseerr"})
+    app.logger.info("Request sent to Radarr tmdb_id=%s", media_id)
+    return jsonify({"ok": True, "target": "radarr"})
+
+
+def send_to_sonarr(item: dict[str, Any]) -> Any:
+    if not SONARR_URL or not SONARR_API_KEY:
+        return api_error("Sonarr is not configured", 400)
+
+    try:
+        media_id = int(item.get("id"))
+    except (TypeError, ValueError):
+        return api_error("Invalid show id for Sonarr request", 400, str(item.get("id")))
+
+    lookup_term = f"tmdb:{media_id}"
+    try:
+        lookup_response = requests.get(
+            f"{SONARR_URL}/api/v3/series/lookup",
+            params={"term": lookup_term},
+            headers={"X-Api-Key": SONARR_API_KEY},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return api_error("Sonarr lookup failed", 502, str(exc))
+
+    if lookup_response.status_code != 200:
+        return api_error("Sonarr lookup failed", 400, response_details(lookup_response))
+
+    lookup_items = lookup_response.json()
+    selected = next((row for row in lookup_items if row.get("tmdbId") == media_id), None)
+    if not selected and lookup_items:
+        selected = lookup_items[0]
+    if not selected:
+        return api_error("Unable to map TMDB show to Sonarr series", 404, lookup_term)
+
+    selected["qualityProfileId"] = SONARR_QUALITY_PROFILE_ID
+    selected["languageProfileId"] = SONARR_LANGUAGE_PROFILE_ID
+    selected["rootFolderPath"] = SONARR_ROOT_FOLDER
+    selected["monitored"] = True
+    selected["addOptions"] = {"searchForMissingEpisodes": SONARR_SEARCH_ON_ADD}
+
+    app.logger.info("Submitting Sonarr payload tmdb_id=%s tvdb_id=%s", media_id, selected.get("tvdbId"))
+
+    try:
+        response = requests.post(
+            f"{SONARR_URL}/api/v3/series",
+            json=selected,
+            headers={"X-Api-Key": SONARR_API_KEY},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return api_error("Sonarr request failed", 502, str(exc))
+
+    if response.status_code == 409:
+        return api_error("Series already exists or is already monitored in Sonarr", 409, response_details(response))
+
+    if response.status_code not in {200, 201}:
+        return api_error("Sonarr request failed", 400, response_details(response))
+
+    app.logger.info("Request sent to Sonarr tmdb_id=%s", media_id)
+    return jsonify({"ok": True, "target": "sonarr"})
 
 
 def send_to_lazylibrarian(item: dict[str, Any]) -> Any:

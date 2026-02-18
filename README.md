@@ -1,6 +1,6 @@
 # pooprequests
 
-A polished, container-ready Flask web app that authenticates with Jellyfin credentials and provides one-click media requests routed to Jellyseerr, LazyLibrarian, and Listenarr.
+A polished, container-ready Flask web app that authenticates with Jellyfin credentials and provides one-click media requests routed to Radarr, Sonarr, LazyLibrarian, and Listenarr.
 
 ## Features
 
@@ -9,7 +9,8 @@ A polished, container-ready Flask web app that authenticates with Jellyfin crede
 - Media picker: Movies, TV, Books, Audiobooks
 - Live search cards with posters, year, and basic details
 - One-click request routing:
-  - Movies / TV -> Jellyseerr
+  - Movies -> Radarr
+  - TV -> Sonarr
   - Books -> LazyLibrarian
   - Audiobooks -> Listenarr
 - Improved backend error handling for upstream/service failures
@@ -20,7 +21,8 @@ Set these environment variables when running the container:
 
 - `JELLYFIN_URL` (default: `http://localhost:8096`)
 - `TMDB_API_KEY` (required for movie/TV search)
-- `JELLYSEERR_URL`, `JELLYSEERR_API_KEY`
+- `RADARR_URL`, `RADARR_API_KEY`, `RADARR_ROOT_FOLDER`, `RADARR_QUALITY_PROFILE_ID`, `RADARR_SEARCH_ON_ADD`
+- `SONARR_URL`, `SONARR_API_KEY`, `SONARR_ROOT_FOLDER`, `SONARR_QUALITY_PROFILE_ID`, `SONARR_LANGUAGE_PROFILE_ID`, `SONARR_SEARCH_ON_ADD`
 - `LAZYLIBRARIAN_URL`, `LAZYLIBRARIAN_API_KEY`
 - `LISTENARR_URL`, `LISTENARR_API_KEY`
 - `LOG_LEVEL` (optional, default: `INFO`)
@@ -36,8 +38,10 @@ docker build -t pooprequests:latest .
 docker run --rm -p 8080:8080 \
   -e JELLYFIN_URL="http://jellyfin:8096" \
   -e TMDB_API_KEY="your_tmdb_key" \
-  -e JELLYSEERR_URL="http://jellyseerr:5055" \
-  -e JELLYSEERR_API_KEY="your_jellyseerr_key" \
+  -e RADARR_URL="http://radarr:7878" \
+  -e RADARR_API_KEY="your_radarr_key" \
+  -e SONARR_URL="http://sonarr:8989" \
+  -e SONARR_API_KEY="your_sonarr_key" \
   -e LAZYLIBRARIAN_URL="http://lazylibrarian:5299" \
   -e LAZYLIBRARIAN_API_KEY="your_lazylibrarian_key" \
   -e LISTENARR_URL="http://listenarr:8787" \
@@ -100,7 +104,7 @@ If the app does not launch in CasaOS, verify:
 
 - Environment entries are `KEY=value` pairs. Do **not** use invalid keys like `/config=/config`.
 - Do **not** set `command: []` in CasaOS compose for this app. That overrides the image `CMD` and causes an immediate exit/restart loop.
-- `JELLYSEERR_URL`, `LAZYLIBRARIAN_URL`, and `LISTENARR_URL` include full URLs with `http://` and valid ports.
+- `RADARR_URL`, `SONARR_URL`, `LAZYLIBRARIAN_URL`, and `LISTENARR_URL` include full URLs with `http://` and valid ports.
 - Service port mapping and `x-casaos.port_map` both point to the published host port (for example `8675`).
 - `/config` is bind-mounted to a writable host path and `PUID`/`PGID` match your host user/group so `pooprequests.log` can be created.
 
@@ -112,7 +116,8 @@ Example env entries:
 
 environment:
   - JELLYFIN_URL=http://jellyfin:8096
-  - JELLYSEERR_URL=http://jellyseerr:8097
+  - RADARR_URL=http://radarr:7878
+  - SONARR_URL=http://sonarr:8989
   - LAZYLIBRARIAN_URL=http://lazylibrarian:5299
   - LISTENARR_URL=http://listenarr:4545
   - LOG_TO_FILE=true
