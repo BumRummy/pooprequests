@@ -1,5 +1,7 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -11,11 +13,42 @@ load_dotenv()
 app = Flask(__name__)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
-app.logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+LOG_TO_FILE = os.getenv("LOG_TO_FILE", "true").lower() in {"1", "true", "yes", "on"}
+LOG_DIR = os.getenv("LOG_DIR", "/config")
+LOG_FILE_NAME = os.getenv("LOG_FILE_NAME", "pooprequests.log")
+
+
+def configure_logging() -> None:
+    level = getattr(logging, LOG_LEVEL, logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(level)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    if LOG_TO_FILE:
+        try:
+            log_dir = Path(LOG_DIR)
+            log_dir.mkdir(parents=True, exist_ok=True)
+            file_handler = RotatingFileHandler(
+                log_dir / LOG_FILE_NAME,
+                maxBytes=2 * 1024 * 1024,
+                backupCount=3,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+        except OSError as exc:
+            root_logger.warning("Unable to initialize file logging at %s: %s", LOG_DIR, exc)
+
+    app.logger.setLevel(level)
+
+
+configure_logging()
 
 JELLYFIN_URL = os.getenv("JELLYFIN_URL", "http://localhost:8096").rstrip("/")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
@@ -322,5 +355,10 @@ def send_to_listenarr(item: dict[str, Any]) -> Any:
 
 
 if __name__ == "__main__":
-    app.logger.info("Starting PoopRequests server on 0.0.0.0:8080 log_level=%s", LOG_LEVEL)
+    app.logger.info(
+        "Starting PoopRequests server on 0.0.0.0:8080 log_level=%s log_to_file=%s log_dir=%s",
+        LOG_LEVEL,
+        LOG_TO_FILE,
+        LOG_DIR,
+    )
     app.run(host="0.0.0.0", port=8080, debug=False)

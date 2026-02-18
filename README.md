@@ -24,6 +24,8 @@ Set these environment variables when running the container:
 - `LAZYLIBRARIAN_URL`, `LAZYLIBRARIAN_API_KEY`
 - `LISTENARR_URL`, `LISTENARR_API_KEY`
 - `LOG_LEVEL` (optional, default: `INFO`)
+- `LOG_TO_FILE` (optional, default: `true`)
+- `LOG_DIR` (optional, default: `/config`)
 
 ## Run with Docker
 
@@ -54,6 +56,8 @@ docker compose up -d
 ```
 
 This uses `docker-compose.yml` with the prebuilt image `nightnightnight/pooprequests:latest` and attaches the app to a `media-stack` network so it can reach Jellyfin and companion services by container name.
+
+Logs are emitted to container stdout and (by default) also written to `./config/pooprequests.log` via a bind mount to `/config`.
 
 
 ## Build helper CLI

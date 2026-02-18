@@ -15,6 +15,10 @@ services:
       LISTENARR_URL: ${LISTENARR_URL:-http://listenarr:8787}
       LISTENARR_API_KEY: ${LISTENARR_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_DIR: ${LOG_DIR:-/config}
+    volumes:
+      - ./config:/config
 
 networks:
   default:
