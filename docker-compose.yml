@@ -17,6 +17,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_TO_FILE: ${LOG_TO_FILE:-true}
       LOG_DIR: ${LOG_DIR:-/config}
+      LOG_FILE_NAME: ${LOG_FILE_NAME:-pooprequests.log}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
       - ./config:/config
 

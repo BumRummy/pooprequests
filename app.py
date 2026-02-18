@@ -16,6 +16,45 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_TO_FILE = os.getenv("LOG_TO_FILE", "true").lower() in {"1", "true", "yes", "on"}
 LOG_DIR = os.getenv("LOG_DIR", "/config")
 LOG_FILE_NAME = os.getenv("LOG_FILE_NAME", "pooprequests.log")
+PUID = os.getenv("PUID", "").strip()
+PGID = os.getenv("PGID", "").strip()
+
+
+def _parse_int_env(name: str, raw_value: str) -> int | None:
+    if not raw_value:
+        return None
+    try:
+        return int(raw_value)
+    except ValueError:
+        logging.getLogger().warning("Ignoring invalid %s=%r (must be an integer)", name, raw_value)
+        return None
+
+
+def prepare_log_dir(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    uid = _parse_int_env("PUID", PUID)
+    gid = _parse_int_env("PGID", PGID)
+    if uid is None and gid is None:
+        return
+
+    if os.geteuid() != 0:
+        logging.getLogger().info(
+            "PUID/PGID provided but process is not root; skipping ownership update for %s",
+            log_dir,
+        )
+        return
+
+    try:
+        os.chown(log_dir, uid if uid is not None else -1, gid if gid is not None else -1)
+    except OSError as exc:
+        logging.getLogger().warning(
+            "Unable to set ownership on %s with PUID=%s PGID=%s: %s",
+            log_dir,
+            PUID or "<unset>",
+            PGID or "<unset>",
+            exc,
+        )
 
 
 def configure_logging() -> None:
@@ -33,7 +72,7 @@ def configure_logging() -> None:
     if LOG_TO_FILE:
         try:
             log_dir = Path(LOG_DIR)
-            log_dir.mkdir(parents=True, exist_ok=True)
+            prepare_log_dir(log_dir)
             file_handler = RotatingFileHandler(
                 log_dir / LOG_FILE_NAME,
                 maxBytes=2 * 1024 * 1024,
@@ -326,9 +365,12 @@ def send_to_listenarr(item: dict[str, Any]) -> Any:
 
 if __name__ == "__main__":
     app.logger.info(
-        "Starting PoopRequests server on 0.0.0.0:8080 log_level=%s log_to_file=%s log_dir=%s",
+        "Starting PoopRequests server on 0.0.0.0:8080 log_level=%s log_to_file=%s log_path=%s/%s puid=%s pgid=%s",
         LOG_LEVEL,
         LOG_TO_FILE,
         LOG_DIR,
+        LOG_FILE_NAME,
+        PUID or "<unset>",
+        PGID or "<unset>",
     )
     app.run(host="0.0.0.0", port=8080, debug=False)

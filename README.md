@@ -1,6 +1,6 @@
 # pooprequests
 
-A polished, container-ready Flask web app that authenticates with Jellyfin, imports users, and provides one-click media requests routed to Jellyseerr, LazyLibrarian, and Listenarr.
+A polished, container-ready Flask web app that authenticates with Jellyfin credentials and provides one-click media requests routed to Jellyseerr, LazyLibrarian, and Listenarr.
 
 ## Features
 
@@ -26,6 +26,8 @@ Set these environment variables when running the container:
 - `LOG_LEVEL` (optional, default: `INFO`)
 - `LOG_TO_FILE` (optional, default: `true`)
 - `LOG_DIR` (optional, default: `/config`)
+- `LOG_FILE_NAME` (optional, default: `pooprequests.log`)
+- `PUID`, `PGID` (optional, default: `1000`) used to set `/config` ownership at startup when running as root
 
 ## Run with Docker
 
@@ -78,3 +80,28 @@ What it does:
 - builds the Docker image with your chosen tag
 
 Run `python scripts/pooprequests_cli.py --help` for all options.
+
+
+## CasaOS / ZimaOS notes
+
+If the app does not launch in CasaOS, verify:
+
+- Environment entries are `KEY=value` pairs. Do **not** use invalid keys like `/config=/config`.
+- `JELLYSEERR_URL`, `LAZYLIBRARIAN_URL`, and `LISTENARR_URL` include full URLs with `http://` and valid ports.
+- Service port mapping and `x-casaos.port_map` both point to the published host port (for example `8675`).
+- `/config` is bind-mounted to a writable host path and `PUID`/`PGID` match your host user/group so `pooprequests.log` can be created.
+
+Example env entries:
+
+```yaml
+environment:
+  - JELLYFIN_URL=http://jellyfin:8096
+  - JELLYSEERR_URL=http://jellyseerr:8097
+  - LAZYLIBRARIAN_URL=http://lazylibrarian:5299
+  - LISTENARR_URL=http://listenarr:4545
+  - LOG_TO_FILE=true
+  - LOG_DIR=/config
+  - LOG_FILE_NAME=pooprequests.log
+  - PUID=1000
+  - PGID=1000
+```
