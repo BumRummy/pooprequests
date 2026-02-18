@@ -48,10 +48,11 @@ Then open `http://localhost:8080`.
 cp .env.example .env
 # edit .env with your real API keys
 
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-This uses `docker-compose.yml` and attaches the app to a `media-stack` network so it can reach Jellyfin and companion services by container name.
+This uses `docker-compose.yml` with the prebuilt image `nightnightnight/pooprequests:latest` and attaches the app to a `media-stack` network so it can reach Jellyfin and companion services by container name.
 
 
 ## Build helper CLI

@@ -1,6 +1,6 @@
 services:
   pooprequests:
-    build: .
+    image: nightnightnight/pooprequests:latest
     container_name: pooprequests
     restart: unless-stopped
     ports:
