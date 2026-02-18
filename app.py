@@ -110,6 +110,16 @@ def api_error(message: str, status: int = 400, details: str | None = None) -> tu
     return jsonify(payload), status
 
 
+def response_details(response: requests.Response) -> str:
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            return body.get("message") or body.get("error") or str(body)
+        return str(body)
+    except ValueError:
+        return response.text.strip() or f"HTTP {response.status_code}"
+
+
 @app.get("/")
 def index() -> str:
     app.logger.info("Serving index page")
@@ -294,11 +304,12 @@ def send_to_jellyseerr(item: dict[str, Any]) -> Any:
         return api_error("Jellyseerr is not configured", 400)
 
     media_type = "movie" if item.get("mediaType") == "movies" else "tv"
-    payload = {
+    payload: dict[str, Any] = {
         "mediaType": media_type,
         "mediaId": item.get("id"),
-        "seasons": "all" if media_type == "tv" else None,
     }
+    if media_type == "tv":
+        payload["seasons"] = "all"
 
     try:
         response = requests.post(
@@ -310,8 +321,15 @@ def send_to_jellyseerr(item: dict[str, Any]) -> Any:
     except requests.RequestException as exc:
         return api_error("Jellyseerr request failed", 502, str(exc))
 
+    if response.status_code == 403:
+        return api_error(
+            "Jellyseerr rejected the request: your API key does not have request permission.",
+            403,
+            response_details(response),
+        )
+
     if response.status_code not in {200, 201}:
-        return api_error("Jellyseerr request failed", 400, response.text)
+        return api_error("Jellyseerr request failed", 400, response_details(response))
 
     app.logger.info("Request sent to Jellyseerr id=%s", item.get("id"))
     return jsonify({"ok": True, "target": "jellyseerr"})
