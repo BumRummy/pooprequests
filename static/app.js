@@ -27,6 +27,19 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+async function parseApiResponse(response) {
+  const raw = await response.text();
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { error: raw };
+  }
+}
+
 async function login() {
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
@@ -46,7 +59,7 @@ async function login() {
       body: JSON.stringify({ username, password }),
     });
 
-    const data = await response.json();
+    const data = await parseApiResponse(response);
     if (!response.ok) {
       throw new Error(data.error || 'Login failed');
     }
@@ -136,7 +149,7 @@ async function submitRequest(encodedItem) {
       body: JSON.stringify(item),
     });
 
-    const data = await response.json();
+    const data = await parseApiResponse(response);
     if (!response.ok) {
       throw new Error(data.error || 'Request failed');
     }
