@@ -304,12 +304,17 @@ def send_to_jellyseerr(item: dict[str, Any]) -> Any:
         return api_error("Jellyseerr is not configured", 400)
 
     media_type = "movie" if item.get("mediaType") == "movies" else "tv"
+    try:
+        media_id = int(item.get("id"))
+    except (TypeError, ValueError):
+        return api_error("Invalid media id for Jellyseerr request", 400, str(item.get("id")))
+
     payload: dict[str, Any] = {
         "mediaType": media_type,
-        "mediaId": item.get("id"),
+        "mediaId": media_id,
     }
-    if media_type == "tv":
-        payload["seasons"] = "all"
+
+    app.logger.info("Submitting Jellyseerr payload media_type=%s media_id=%s", media_type, media_id)
 
     try:
         response = requests.post(
