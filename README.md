@@ -23,6 +23,7 @@ Set these environment variables when running the container:
 - `JELLYSEERR_URL`, `JELLYSEERR_API_KEY`
 - `LAZYLIBRARIAN_URL`, `LAZYLIBRARIAN_API_KEY`
 - `LISTENARR_URL`, `LISTENARR_API_KEY`
+- `LOG_LEVEL` (optional, default: `INFO`)
 
 ## Run with Docker
 

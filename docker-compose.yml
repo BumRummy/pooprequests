@@ -14,6 +14,7 @@ services:
       LAZYLIBRARIAN_API_KEY: ${LAZYLIBRARIAN_API_KEY:-}
       LISTENARR_URL: ${LISTENARR_URL:-http://listenarr:8787}
       LISTENARR_API_KEY: ${LISTENARR_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 networks:
   default:

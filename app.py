@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 
@@ -8,6 +9,13 @@ from flask import Flask, jsonify, render_template, request
 load_dotenv()
 
 app = Flask(__name__)
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+app.logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 
 JELLYFIN_URL = os.getenv("JELLYFIN_URL", "http://localhost:8096").rstrip("/")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
@@ -26,11 +34,13 @@ def api_error(message: str, status: int = 400, details: str | None = None) -> tu
     payload = {"error": message}
     if details:
         payload["details"] = details
+    app.logger.warning("API error status=%s message=%s details=%s", status, message, details or "")
     return jsonify(payload), status
 
 
 @app.get("/")
 def index() -> str:
+    app.logger.info("Serving index page")
     return render_template("index.html")
 
 
@@ -42,6 +52,8 @@ def login() -> Any:
 
     if not username or not password:
         return api_error("Username and password are required.", 400)
+
+    app.logger.info("Login attempt for user=%s", username)
 
     headers = {
         "Content-Type": "application/json",
@@ -65,6 +77,7 @@ def login() -> Any:
         return api_error("Invalid login", 401)
 
     data = response.json()
+    app.logger.info("Login success user=%s", data.get("User", {}).get("Name", username))
     return jsonify(
         {
             "token": data.get("AccessToken"),
@@ -77,6 +90,7 @@ def login() -> Any:
 @app.get("/api/users")
 def users() -> Any:
     token = request.headers.get("X-Jellyfin-Token", "")
+    app.logger.info("Fetching Jellyfin users")
     if not token:
         return api_error("Missing token", 401)
 
@@ -107,6 +121,7 @@ def users() -> Any:
 def search_media() -> Any:
     query = request.args.get("q", "").strip()
     media_type = request.args.get("type", "movies")
+    app.logger.info("Search request type=%s query_length=%s", media_type, len(query))
 
     if len(query) < 2:
         return jsonify([])
@@ -220,6 +235,7 @@ def search_audiobooks(query: str) -> list[dict[str, Any]]:
 def request_item() -> Any:
     payload = request.get_json(silent=True) or {}
     media_type = payload.get("mediaType")
+    app.logger.info("Request submission media_type=%s id=%s", media_type, payload.get("id"))
 
     if media_type in {"movies", "tv"}:
         return send_to_jellyseerr(payload)
@@ -255,6 +271,7 @@ def send_to_jellyseerr(item: dict[str, Any]) -> Any:
     if response.status_code not in {200, 201}:
         return api_error("Jellyseerr request failed", 400, response.text)
 
+    app.logger.info("Request sent to Jellyseerr id=%s", item.get("id"))
     return jsonify({"ok": True, "target": "jellyseerr"})
 
 
@@ -279,6 +296,7 @@ def send_to_lazylibrarian(item: dict[str, Any]) -> Any:
     if response.status_code != 200:
         return api_error("LazyLibrarian request failed", 400, response.text)
 
+    app.logger.info("Request sent to LazyLibrarian id=%s", item.get("id"))
     return jsonify({"ok": True, "target": "lazylibrarian"})
 
 
@@ -299,8 +317,10 @@ def send_to_listenarr(item: dict[str, Any]) -> Any:
     if response.status_code not in {200, 201, 202}:
         return api_error("Listenarr request failed", 400, response.text)
 
+    app.logger.info("Request sent to Listenarr id=%s", item.get("id"))
     return jsonify({"ok": True, "target": "listenarr"})
 
 
 if __name__ == "__main__":
+    app.logger.info("Starting PoopRequests server on 0.0.0.0:8080 log_level=%s", LOG_LEVEL)
     app.run(host="0.0.0.0", port=8080, debug=False)
