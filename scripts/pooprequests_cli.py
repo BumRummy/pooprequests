@@ -48,6 +48,10 @@ def build_image(project_dir: Path, image_tag: str) -> None:
     run(["docker", "build", "-t", image_tag, "."], cwd=project_dir)
 
 
+def push_branch(project_dir: Path, remote: str, branch: str) -> None:
+    run(["git", "push", remote, branch], cwd=project_dir)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Clone/pull PoopRequests and build the Docker image.",
@@ -68,6 +72,16 @@ def parse_args() -> argparse.Namespace:
         default="pooprequests:latest",
         help="Docker image tag to build (default: pooprequests:latest)",
     )
+    parser.add_argument(
+        "--push",
+        action="store_true",
+        help="Also push the checked-out branch to the git remote after build.",
+    )
+    parser.add_argument(
+        "--remote",
+        default="origin",
+        help="Git remote name used with --push (default: origin)",
+    )
     return parser.parse_args()
 
 
@@ -82,9 +96,16 @@ def main() -> int:
         project_dir = clone_or_update(args.repo, args.branch, checkout_dir)
         build_image(project_dir, args.image_tag)
 
+        if args.push:
+            push_branch(project_dir, args.remote, args.branch)
+            push_status = f"Pushed branch '{args.branch}' to remote '{args.remote}'."
+        else:
+            push_status = "Not pushed to GitHub. Re-run with --push to upload branch changes."
+
         print("\n✅ Done. Image built successfully.")
         print(f"Repository: {project_dir}")
         print(f"Image tag: {args.image_tag}")
+        print(push_status)
         return 0
     except Exception as exc:  # noqa: BLE001 - CLI should report readable errors.
         print(f"\n❌ Error: {exc}", file=sys.stderr)

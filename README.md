@@ -78,6 +78,18 @@ What it does:
 - checks for `git` and `docker`
 - clones the repo (or fetches + pulls if already cloned)
 - builds the Docker image with your chosen tag
+- prints whether branch changes were pushed to GitHub
+
+By default it does **not** push git changes. To upload your branch:
+
+```bash
+python scripts/pooprequests_cli.py \
+  --repo https://github.com/<your-user>/pooprequests.git \
+  --branch main \
+  --checkout-dir ~/apps/pooprequests-src \
+  --image-tag pooprequests:latest \
+  --push
+```
 
 Run `python scripts/pooprequests_cli.py --help` for all options.
 
