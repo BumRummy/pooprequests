@@ -120,36 +120,6 @@ def login() -> Any:
     )
 
 
-@app.get("/api/users")
-def users() -> Any:
-    token = request.headers.get("X-Jellyfin-Token", "")
-    app.logger.info("Fetching Jellyfin users")
-    if not token:
-        return api_error("Missing token", 401)
-
-    try:
-        response = requests.get(
-            f"{JELLYFIN_URL}/Users",
-            headers={"X-Emby-Token": token},
-            timeout=12,
-        )
-    except requests.RequestException as exc:
-        return api_error("Unable to fetch users", 502, str(exc))
-
-    if response.status_code != 200:
-        return api_error("Unable to fetch users", 400)
-
-    users_payload = [
-        {
-            "id": user.get("Id"),
-            "name": user.get("Name"),
-            "isAdmin": user.get("Policy", {}).get("IsAdministrator", False),
-        }
-        for user in response.json()
-    ]
-    return jsonify(users_payload)
-
-
 @app.get("/api/search")
 def search_media() -> Any:
     query = request.args.get("q", "").strip()

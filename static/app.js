@@ -6,8 +6,6 @@ const mediaType = document.getElementById('mediaType');
 const results = document.getElementById('results');
 const welcome = document.getElementById('welcome');
 const toast = document.getElementById('toast');
-const usersPanel = document.getElementById('usersPanel');
-const usersList = document.getElementById('usersList');
 const emptyState = document.getElementById('emptyState');
 
 let authToken = '';
@@ -56,39 +54,14 @@ async function login() {
     authToken = data.token;
     welcome.textContent = `Signed in as ${data.user}`;
     loginModal.classList.add('hidden');
+    loginModal.style.display = 'none';
+    loginModal.setAttribute('aria-hidden', 'true');
     searchInput.disabled = false;
     searchInput.focus();
-    loadUsers();
   } catch (error) {
     loginError.textContent = error.message;
   } finally {
     loginBtn.disabled = false;
-  }
-}
-
-async function loadUsers() {
-  try {
-    const response = await fetch('/api/users', {
-      headers: { 'X-Jellyfin-Token': authToken },
-    });
-
-    if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload.error || 'Could not import users from Jellyfin');
-    }
-
-    const users = await response.json();
-    usersList.innerHTML = '';
-
-    users.forEach((user) => {
-      const li = document.createElement('li');
-      li.textContent = `${user.name}${user.isAdmin ? ' (admin)' : ''}`;
-      usersList.appendChild(li);
-    });
-
-    usersPanel.classList.remove('hidden');
-  } catch (error) {
-    showToast(error.message, true);
   }
 }
 
