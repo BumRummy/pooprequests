@@ -87,6 +87,7 @@ Run `python scripts/pooprequests_cli.py --help` for all options.
 If the app does not launch in CasaOS, verify:
 
 - Environment entries are `KEY=value` pairs. Do **not** use invalid keys like `/config=/config`.
+- Do **not** set `command: []` in CasaOS compose for this app. That overrides the image `CMD` and causes an immediate exit/restart loop.
 - `JELLYSEERR_URL`, `LAZYLIBRARIAN_URL`, and `LISTENARR_URL` include full URLs with `http://` and valid ports.
 - Service port mapping and `x-casaos.port_map` both point to the published host port (for example `8675`).
 - `/config` is bind-mounted to a writable host path and `PUID`/`PGID` match your host user/group so `pooprequests.log` can be created.
@@ -94,6 +95,9 @@ If the app does not launch in CasaOS, verify:
 Example env entries:
 
 ```yaml
+# Leave command unset so image default CMD runs app.py
+# command: []  # <-- do not set this
+
 environment:
   - JELLYFIN_URL=http://jellyfin:8096
   - JELLYSEERR_URL=http://jellyseerr:8097
