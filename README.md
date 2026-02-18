@@ -41,3 +41,14 @@ docker run --rm -p 8080:8080 \
 ```
 
 Then open `http://localhost:8080`.
+
+## Run with Docker Compose (yaml)
+
+```bash
+cp .env.example .env
+# edit .env with your real API keys
+
+docker compose up -d --build
+```
+
+This uses `docker-compose.yml` and attaches the app to a `media-stack` network so it can reach Jellyfin and companion services by container name.
