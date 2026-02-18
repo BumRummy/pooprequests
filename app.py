@@ -96,14 +96,9 @@ OPENLIBRARY_ENDPOINT = "https://openlibrary.org/search.json"
 
 RADARR_URL = os.getenv("RADARR_URL", "").rstrip("/")
 RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
-RADARR_ROOT_FOLDER = os.getenv("RADARR_ROOT_FOLDER", "/movies")
-RADARR_QUALITY_PROFILE_ID = _parse_int_env("RADARR_QUALITY_PROFILE_ID", os.getenv("RADARR_QUALITY_PROFILE_ID", "1")) or 1
 RADARR_SEARCH_ON_ADD = os.getenv("RADARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
 SONARR_URL = os.getenv("SONARR_URL", "").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
-SONARR_ROOT_FOLDER = os.getenv("SONARR_ROOT_FOLDER", "/tv")
-SONARR_QUALITY_PROFILE_ID = _parse_int_env("SONARR_QUALITY_PROFILE_ID", os.getenv("SONARR_QUALITY_PROFILE_ID", "1")) or 1
-SONARR_LANGUAGE_PROFILE_ID = _parse_int_env("SONARR_LANGUAGE_PROFILE_ID", os.getenv("SONARR_LANGUAGE_PROFILE_ID", "1")) or 1
 SONARR_SEARCH_ON_ADD = os.getenv("SONARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
 LAZYLIBRARIAN_URL = os.getenv("LAZYLIBRARIAN_URL", "").rstrip("/")
 LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
@@ -127,6 +122,64 @@ def response_details(response: requests.Response) -> str:
         return str(body)
     except ValueError:
         return response.text.strip() or f"HTTP {response.status_code}"
+
+
+def fetch_arr_quality_profile_id(arr_url: str, api_key: str, service_name: str) -> tuple[int | None, str | None]:
+    try:
+        response = requests.get(
+            f"{arr_url}/api/v3/qualityprofile",
+            headers={"X-Api-Key": api_key},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+    if response.status_code != 200:
+        return None, response_details(response)
+
+    profiles = response.json()
+    if not isinstance(profiles, list) or not profiles:
+        return None, f"No quality profiles returned by {service_name}"
+
+    any_profile = next(
+        (
+            row
+            for row in profiles
+            if isinstance(row, dict) and isinstance(row.get("name"), str) and "any" in row["name"].lower()
+        ),
+        None,
+    )
+    selected = any_profile or profiles[0]
+    profile_id = selected.get("id") if isinstance(selected, dict) else None
+    if not isinstance(profile_id, int):
+        return None, f"Invalid quality profile data from {service_name}"
+
+    return profile_id, None
+
+
+def fetch_arr_root_folder_path(arr_url: str, api_key: str, service_name: str) -> tuple[str | None, str | None]:
+    try:
+        response = requests.get(
+            f"{arr_url}/api/v3/rootfolder",
+            headers={"X-Api-Key": api_key},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+    if response.status_code != 200:
+        return None, response_details(response)
+
+    folders = response.json()
+    if not isinstance(folders, list) or not folders:
+        return None, f"No root folders returned by {service_name}"
+
+    first = folders[0]
+    path = first.get("path") if isinstance(first, dict) else None
+    if not isinstance(path, str) or not path:
+        return None, f"Invalid root folder data from {service_name}"
+
+    return path, None
 
 
 @app.get("/")
@@ -319,11 +372,19 @@ def send_to_radarr(item: dict[str, Any]) -> Any:
     except (TypeError, ValueError):
         return api_error("Invalid movie id for Radarr request", 400, str(item.get("id")))
 
+    quality_profile_id, quality_err = fetch_arr_quality_profile_id(RADARR_URL, RADARR_API_KEY, "Radarr")
+    if quality_profile_id is None:
+        return api_error("Unable to resolve Radarr quality profile", 400, quality_err)
+
+    root_folder_path, root_err = fetch_arr_root_folder_path(RADARR_URL, RADARR_API_KEY, "Radarr")
+    if root_folder_path is None:
+        return api_error("Unable to resolve Radarr root folder", 400, root_err)
+
     payload: dict[str, Any] = {
         "tmdbId": media_id,
         "title": item.get("title") or "",
-        "qualityProfileId": RADARR_QUALITY_PROFILE_ID,
-        "rootFolderPath": RADARR_ROOT_FOLDER,
+        "qualityProfileId": quality_profile_id,
+        "rootFolderPath": root_folder_path,
         "monitored": True,
         "addOptions": {"searchForMovie": RADARR_SEARCH_ON_ADD},
     }
@@ -380,9 +441,16 @@ def send_to_sonarr(item: dict[str, Any]) -> Any:
     if not selected:
         return api_error("Unable to map TMDB show to Sonarr series", 404, lookup_term)
 
-    selected["qualityProfileId"] = SONARR_QUALITY_PROFILE_ID
-    selected["languageProfileId"] = SONARR_LANGUAGE_PROFILE_ID
-    selected["rootFolderPath"] = SONARR_ROOT_FOLDER
+    quality_profile_id, quality_err = fetch_arr_quality_profile_id(SONARR_URL, SONARR_API_KEY, "Sonarr")
+    if quality_profile_id is None:
+        return api_error("Unable to resolve Sonarr quality profile", 400, quality_err)
+
+    root_folder_path, root_err = fetch_arr_root_folder_path(SONARR_URL, SONARR_API_KEY, "Sonarr")
+    if root_folder_path is None:
+        return api_error("Unable to resolve Sonarr root folder", 400, root_err)
+
+    selected["qualityProfileId"] = quality_profile_id
+    selected["rootFolderPath"] = root_folder_path
     selected["monitored"] = True
     selected["addOptions"] = {"searchForMissingEpisodes": SONARR_SEARCH_ON_ADD}
 
