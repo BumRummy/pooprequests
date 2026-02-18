@@ -96,10 +96,8 @@ OPENLIBRARY_ENDPOINT = "https://openlibrary.org/search.json"
 
 RADARR_URL = os.getenv("RADARR_URL", "").rstrip("/")
 RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
-RADARR_SEARCH_ON_ADD = os.getenv("RADARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
 SONARR_URL = os.getenv("SONARR_URL", "").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
-SONARR_SEARCH_ON_ADD = os.getenv("SONARR_SEARCH_ON_ADD", "true").lower() in {"1", "true", "yes", "on"}
 LAZYLIBRARIAN_URL = os.getenv("LAZYLIBRARIAN_URL", "").rstrip("/")
 LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
 LISTENARR_URL = os.getenv("LISTENARR_URL", "").rstrip("/")
@@ -386,7 +384,7 @@ def send_to_radarr(item: dict[str, Any]) -> Any:
         "qualityProfileId": quality_profile_id,
         "rootFolderPath": root_folder_path,
         "monitored": True,
-        "addOptions": {"searchForMovie": RADARR_SEARCH_ON_ADD},
+        "addOptions": {"searchForMovie": True},
     }
 
     app.logger.info("Submitting Radarr payload tmdb_id=%s", media_id)
@@ -452,7 +450,7 @@ def send_to_sonarr(item: dict[str, Any]) -> Any:
     selected["qualityProfileId"] = quality_profile_id
     selected["rootFolderPath"] = root_folder_path
     selected["monitored"] = True
-    selected["addOptions"] = {"searchForMissingEpisodes": SONARR_SEARCH_ON_ADD}
+    selected["addOptions"] = {"searchForMissingEpisodes": True}
 
     app.logger.info("Submitting Sonarr payload tmdb_id=%s tvdb_id=%s", media_id, selected.get("tvdbId"))
 

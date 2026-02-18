@@ -21,10 +21,11 @@ Set these environment variables when running the container:
 
 - `JELLYFIN_URL` (default: `http://localhost:8096`)
 - `TMDB_API_KEY` (required for movie/TV search)
-- `RADARR_URL`, `RADARR_API_KEY`, `RADARR_SEARCH_ON_ADD`
-- `SONARR_URL`, `SONARR_API_KEY`, `SONARR_SEARCH_ON_ADD`
+- `RADARR_URL`, `RADARR_API_KEY`
+- `SONARR_URL`, `SONARR_API_KEY`
 - `LAZYLIBRARIAN_URL`, `LAZYLIBRARIAN_API_KEY`
 - `LISTENARR_URL`, `LISTENARR_API_KEY`
+- Search-on-add is always enabled for Radarr/Sonarr requests.
 - `LOG_LEVEL` (optional, default: `INFO`)
 - `LOG_TO_FILE` (optional, default: `true`)
 - `LOG_DIR` (optional, default: `/config`)
