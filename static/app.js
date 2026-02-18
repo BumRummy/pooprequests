@@ -118,7 +118,8 @@ async function runSearch() {
       throw new Error('Search failed');
     }
 
-    const items = await response.json();
+    const payload = await parseApiResponse(response);
+    const items = Array.isArray(payload) ? payload : [];
 
     if (!items.length) {
       results.innerHTML = '';
@@ -140,7 +141,13 @@ async function runSearch() {
 }
 
 async function submitRequest(encodedItem) {
-  const item = JSON.parse(decodeURIComponent(encodedItem));
+  let item;
+  try {
+    item = JSON.parse(decodeURIComponent(encodedItem));
+  } catch {
+    showToast('Unable to parse selected item.', true);
+    return;
+  }
 
   try {
     const response = await fetch('/api/request', {
