@@ -86,11 +86,30 @@ async function login() {
   }
 }
 
+
+function sanitizePosterUrl(value) {
+  const poster = String(value || '').trim();
+  if (!poster) {
+    return '';
+  }
+
+  const lowerPoster = poster.toLowerCase();
+  if (
+    lowerPoster === '${poster}' ||
+    lowerPoster === '/${poster}' ||
+    lowerPoster.includes('/${poster}')
+  ) {
+    return '';
+  }
+
+  return poster;
+}
+
 function resultCardTemplate(item) {
   const title = escapeHtml(item.title || 'Untitled');
   const year = escapeHtml(item.year || '');
   const overview = escapeHtml(item.overview || 'No description available.');
-  const poster = escapeHtml(item.poster || '');
+  const poster = escapeHtml(sanitizePosterUrl(item.poster));
   const encodedItem = encodeURIComponent(JSON.stringify(item));
 
   return `
