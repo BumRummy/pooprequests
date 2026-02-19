@@ -11,11 +11,19 @@ const emptyState = document.getElementById('emptyState');
 let authToken = '';
 let debounceTimer;
 
-function showToast(message, isError = false) {
+function showToast(message, isError = false, isWarning = false) {
   toast.textContent = message;
-  toast.style.background = isError ? '#7f1d1d' : '#064e3b';
+  
+  if (isError) {
+    toast.style.background = '#7f1d1d'; // Red for errors
+  } else if (isWarning) {
+    toast.style.background = '#854d0e'; // Amber/yellow for warnings (already exists)
+  } else {
+    toast.style.background = '#064e3b'; // Green for success
+  }
+  
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2600);
+  setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
 function escapeHtml(value) {
@@ -91,7 +99,7 @@ function cardTemplate(item) {
       <div class="card-content">
         <h4>${title} ${year ? `(${year})` : ''}</h4>
         <p>${overview}</p>
-        <button data-item="${encodedItem}">Add Request</button>
+        <button data-item="${encodedItem}">➕ Add Request</button>
       </div>
     </article>
   `;
@@ -106,13 +114,21 @@ async function runSearch() {
   const q = searchInput.value.trim();
   if (q.length < 2) {
     results.innerHTML = '';
-    updateEmptyState('Start typing to search.');
+    updateEmptyState('🔍 Start typing to search for movies, TV shows, or books.');
     return;
   }
 
   const type = mediaType.value;
+  const typeDisplay = {
+    'movies': 'movies',
+    'tv': 'TV shows',
+    'books': 'books',
+    'audiobooks': 'audiobooks'
+  }[type] || 'media';
 
   try {
+    results.innerHTML = '<div class="loading">Searching...</div>';
+    
     const response = await fetch(`/api/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
     if (!response.ok) {
       throw new Error('Search failed');
@@ -123,7 +139,7 @@ async function runSearch() {
 
     if (!items.length) {
       results.innerHTML = '';
-      updateEmptyState('No results found.');
+      updateEmptyState(`😕 No ${typeDisplay} found matching "${escapeHtml(q)}".`);
       return;
     }
 
@@ -135,7 +151,7 @@ async function runSearch() {
     });
   } catch (error) {
     results.innerHTML = '';
-    updateEmptyState('Search unavailable right now.');
+    updateEmptyState('⚠️ Search unavailable right now.');
     showToast(error.message, true);
   }
 }
@@ -145,8 +161,15 @@ async function submitRequest(encodedItem) {
   try {
     item = JSON.parse(decodeURIComponent(encodedItem));
   } catch {
-    showToast('Unable to parse selected item.', true);
+    showToast('❌ Unable to parse selected item.', true);
     return;
+  }
+
+  // Disable the button temporarily to prevent double-clicks
+  const button = event?.target;
+  if (button) {
+    button.disabled = true;
+    button.textContent = '⏳ Adding...';
   }
 
   try {
@@ -157,13 +180,27 @@ async function submitRequest(encodedItem) {
     });
 
     const data = await parseApiResponse(response);
+    
     if (!response.ok) {
-      throw new Error(data.error || 'Request failed');
+      // Check if it's a 409 (Conflict) which means already exists
+      if (response.status === 409) {
+        // Show a warning toast for existing items
+        showToast(data.error || `⚠️ '${item.title}' already exists!`, false, true);
+      } else {
+        throw new Error(data.error || 'Request failed');
+      }
+    } else {
+      // Success!
+      showToast(data.message || `✅ Added to ${data.target}`);
     }
-
-    showToast(`Added to ${data.target}`);
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    // Re-enable the button
+    if (button) {
+      button.disabled = false;
+      button.textContent = '➕ Add Request';
+    }
   }
 }
 
@@ -171,13 +208,23 @@ loginBtn.addEventListener('click', login);
 
 searchInput.addEventListener('input', () => {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(runSearch, 260);
+  debounceTimer = setTimeout(runSearch, 300);
 });
 
-mediaType.addEventListener('change', runSearch);
+mediaType.addEventListener('change', () => {
+  results.innerHTML = '';
+  if (searchInput.value.trim().length >= 2) {
+    runSearch();
+  } else {
+    updateEmptyState(`🔍 Start typing to search for ${mediaType.value}.`);
+  }
+});
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !loginModal.classList.contains('hidden')) {
     login();
   }
 });
+
+// Initialize empty state
+updateEmptyState('🔍 Start typing to search for movies, TV shows, or books.');
