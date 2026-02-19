@@ -86,11 +86,21 @@ async function login() {
   }
 }
 
+
+function sanitizePosterUrl(value) {
+  const poster = String(value || '').trim();
+  if (!poster || poster === '${poster}' || poster.includes('${')) {
+    return '';
+  }
+
+  return poster;
+}
+
 function resultCardTemplate(item) {
   const title = escapeHtml(item.title || 'Untitled');
   const year = escapeHtml(item.year || '');
   const overview = escapeHtml(item.overview || 'No description available.');
-  const poster = escapeHtml(item.poster || '');
+  const poster = escapeHtml(sanitizePosterUrl(item.poster));
   const encodedItem = encodeURIComponent(JSON.stringify(item));
 
   return `

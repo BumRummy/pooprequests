@@ -1,4 +1,7 @@
+import logging
 import os
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -9,37 +12,221 @@ load_dotenv()
 
 app = Flask(__name__)
 
-JELLYFIN_URL = os.getenv("JELLYFIN_URL", "http://localhost:8096").rstrip("/")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_TO_FILE = os.getenv("LOG_TO_FILE", "true").lower() in {"1", "true", "yes", "on"}
+LOG_DIR = os.getenv("LOG_DIR", "/config")
+LOG_FILE_NAME = os.getenv("LOG_FILE_NAME", "pooprequests.log")
+PUID = os.getenv("PUID", "").strip()
+PGID = os.getenv("PGID", "").strip()
+
+
+def _parse_int_env(name: str, raw_value: str) -> int | None:
+    if not raw_value:
+        return None
+    try:
+        return int(raw_value)
+    except ValueError:
+        logging.getLogger().warning("Ignoring invalid %s=%r (must be an integer)", name, raw_value)
+        return None
+
+
+def prepare_log_dir(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    uid = _parse_int_env("PUID", PUID)
+    gid = _parse_int_env("PGID", PGID)
+    if uid is None and gid is None:
+        return
+
+    if os.geteuid() != 0:
+        logging.getLogger().info(
+            "PUID/PGID provided but process is not root; skipping ownership update for %s",
+            log_dir,
+        )
+        return
+
+    try:
+        os.chown(log_dir, uid if uid is not None else -1, gid if gid is not None else -1)
+    except OSError as exc:
+        logging.getLogger().warning(
+            "Unable to set ownership on %s with PUID=%s PGID=%s: %s",
+            log_dir,
+            PUID or "<unset>",
+            PGID or "<unset>",
+            exc,
+        )
+
+
+def configure_logging() -> None:
+    level = getattr(logging, LOG_LEVEL, logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(level)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    if LOG_TO_FILE:
+        try:
+            log_dir = Path(LOG_DIR)
+            prepare_log_dir(log_dir)
+            file_handler = RotatingFileHandler(
+                log_dir / LOG_FILE_NAME,
+                maxBytes=2 * 1024 * 1024,
+                backupCount=3,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+        except OSError as exc:
+            root_logger.warning("Unable to initialize file logging at %s: %s", LOG_DIR, exc)
+
+    app.logger.setLevel(level)
+
+
+configure_logging()
+
+
+
+def _normalize_service_url(raw_url: str) -> str:
+    url = str(raw_url or '').strip()
+    if not url:
+        return ''
+
+    lower = url.lower()
+    if lower.startswith('http//:'):
+        url = 'http://' + url[len('http//:'): ]
+    elif lower.startswith('https//:'):
+        url = 'https://' + url[len('https//:'): ]
+    elif lower.startswith('http:') and not lower.startswith('http://'):
+        url = 'http://' + url[len('http:'): ]
+    elif lower.startswith('https:') and not lower.startswith('https://'):
+        url = 'https://' + url[len('https:'): ]
+
+    return url.rstrip('/')
+
+
+JELLYFIN_URL = _normalize_service_url(os.getenv("JELLYFIN_URL", "http://localhost:8096"))
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
 GOOGLE_BOOKS_ENDPOINT = "https://www.googleapis.com/books/v1/volumes"
 OPENLIBRARY_ENDPOINT = "https://openlibrary.org/search.json"
 
-JELLYSEERR_URL = os.getenv("JELLYSEERR_URL", "").rstrip("/")
-JELLYSEERR_API_KEY = os.getenv("JELLYSEERR_API_KEY", "")
-LAZYLIBRARIAN_URL = os.getenv("LAZYLIBRARIAN_URL", "").rstrip("/")
-LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
-LISTENARR_URL = os.getenv("LISTENARR_URL", "").rstrip("/")
-LISTENARR_API_KEY = os.getenv("LISTENARR_API_KEY", "")
-RADARR_URL = os.getenv("RADARR_URL", "").rstrip("/")
+RADARR_URL = _normalize_service_url(os.getenv("RADARR_URL", ""))
 RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
+RADARR_ROOT_FOLDER = os.getenv("RADARR_ROOT_FOLDER", "")
 RADARR_QUALITY_PROFILE_ID = os.getenv("RADARR_QUALITY_PROFILE_ID", "")
-RADARR_ROOT_FOLDER_PATH = os.getenv("RADARR_ROOT_FOLDER_PATH", "")
-SONARR_URL = os.getenv("SONARR_URL", "").rstrip("/")
+
+SONARR_URL = _normalize_service_url(os.getenv("SONARR_URL", ""))
 SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
+SONARR_ROOT_FOLDER = os.getenv("SONARR_ROOT_FOLDER", "")
 SONARR_QUALITY_PROFILE_ID = os.getenv("SONARR_QUALITY_PROFILE_ID", "")
-SONARR_ROOT_FOLDER_PATH = os.getenv("SONARR_ROOT_FOLDER_PATH", "")
-SONARR_LANGUAGE_PROFILE_ID = os.getenv("SONARR_LANGUAGE_PROFILE_ID", "")
+
+LAZYLIBRARIAN_URL = _normalize_service_url(os.getenv("LAZYLIBRARIAN_URL", ""))
+LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
+LISTENARR_URL = _normalize_service_url(os.getenv("LISTENARR_URL", ""))
+LISTENARR_API_KEY = os.getenv("LISTENARR_API_KEY", "")
 
 
 def api_error(message: str, status: int = 400, details: str | None = None) -> tuple[Any, int]:
     payload = {"error": message}
     if details:
         payload["details"] = details
+    app.logger.warning("API error status=%s message=%s details=%s", status, message, details or "")
     return jsonify(payload), status
+
+
+def api_success(message: str, target: str, data: dict | None = None) -> tuple[Any, int]:
+    payload = {"ok": True, "target": target, "message": message}
+    if data:
+        payload.update(data)
+    return jsonify(payload), 200
+
+
+def response_details(response: requests.Response) -> str:
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            return body.get("message") or body.get("error") or str(body)
+        return str(body)
+    except ValueError:
+        return response.text.strip() or f"HTTP {response.status_code}"
+
+
+def fetch_arr_quality_profile_id(arr_url: str, api_key: str, service_name: str) -> tuple[int | None, str | None]:
+    try:
+        response = requests.get(
+            f"{arr_url}/api/v3/qualityprofile",
+            headers={"X-Api-Key": api_key},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+    if response.status_code != 200:
+        return None, f"HTTP {response.status_code}: {response.text[:200]}"
+
+    try:
+        raw_profiles = response.json()
+    except ValueError as e:
+        app.logger.error(f"Invalid JSON from {service_name} qualityprofile endpoint: {response.text[:500]}")
+        return None, f"Invalid JSON response: {str(e)}"
+
+    profiles = raw_profiles if isinstance(raw_profiles, list) else raw_profiles.get("records", []) if isinstance(raw_profiles, dict) else []
+    if not isinstance(profiles, list) or not profiles:
+        return None, f"No quality profiles returned by {service_name}"
+
+    any_profile = next(
+        (
+            row
+            for row in profiles
+            if isinstance(row, dict) and isinstance(row.get("name"), str) and "any" in row["name"].lower()
+        ),
+        None,
+    )
+    selected = any_profile or profiles[0]
+    profile_id = selected.get("id") if isinstance(selected, dict) else None
+    if not isinstance(profile_id, int):
+        return None, f"Invalid quality profile data from {service_name}"
+
+    return profile_id, None
+
+
+def fetch_arr_root_folder_path(arr_url: str, api_key: str, service_name: str) -> tuple[str | None, str | None]:
+    try:
+        response = requests.get(
+            f"{arr_url}/api/v3/rootfolder",
+            headers={"X-Api-Key": api_key},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+    if response.status_code != 200:
+        return None, f"HTTP {response.status_code}: {response.text[:200]}"
+
+    try:
+        folders = response.json()
+    except ValueError as e:
+        app.logger.error(f"Invalid JSON from {service_name} rootfolder endpoint: {response.text[:500]}")
+        return None, f"Invalid JSON response: {str(e)}"
+
+    if not isinstance(folders, list) or not folders:
+        return None, f"No root folders returned by {service_name}"
+
+    first = folders[0]
+    path = first.get("path") if isinstance(first, dict) else None
+    if not isinstance(path, str) or not path:
+        return None, f"Invalid root folder data from {service_name}"
+
+    return path, None
 
 
 @app.get("/")
 def index() -> str:
+    app.logger.info("Serving index page")
     return render_template("index.html")
 
 
@@ -52,9 +239,134 @@ def login() -> Any:
     if not username or not password:
         return api_error("Username and password are required.", 400)
 
+    app.logger.info("Login attempt for user=%s", username)
+
     headers = {
         "Content-Type": "application/json",
-@@ -199,87 +208,220 @@ def search_audiobooks(query: str) -> list[dict[str, Any]]:
+        "X-Emby-Authorization": (
+            'MediaBrowser Client="PoopRequests", '
+            'Device="Web", DeviceId="pooprequests-web", Version="1.1.0"'
+        ),
+    }
+
+    try:
+        response = requests.post(
+            f"{JELLYFIN_URL}/Users/AuthenticateByName",
+            json={"Username": username, "Pw": password},
+            headers=headers,
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return api_error("Unable to reach Jellyfin.", 502, str(exc))
+
+    if response.status_code != 200:
+        return api_error("Invalid login", 401)
+
+    data = response.json()
+    app.logger.info("Login success user=%s", data.get("User", {}).get("Name", username))
+    return jsonify(
+        {
+            "token": data.get("AccessToken"),
+            "user": data.get("User", {}).get("Name", username),
+            "userId": data.get("User", {}).get("Id", ""),
+        }
+    )
+
+
+@app.get("/api/search")
+def search_media() -> Any:
+    query = request.args.get("q", "").strip()
+    media_type = request.args.get("type", "movies")
+    app.logger.info("Search request type=%s query_length=%s", media_type, len(query))
+
+    if len(query) < 2:
+        return jsonify([])
+
+    if media_type in {"movies", "tv"}:
+        return jsonify(search_tmdb(query, media_type))
+    if media_type == "books":
+        return jsonify(search_books(query))
+    if media_type == "audiobooks":
+        return jsonify(search_audiobooks(query))
+
+    return jsonify([])
+
+
+def search_tmdb(query: str, media_type: str) -> list[dict[str, Any]]:
+    if not TMDB_API_KEY:
+        return []
+
+    endpoint = "movie" if media_type == "movies" else "tv"
+
+    try:
+        response = requests.get(
+            f"https://api.themoviedb.org/3/search/{endpoint}",
+            params={"api_key": TMDB_API_KEY, "query": query, "include_adult": "false"},
+            timeout=12,
+        )
+    except requests.RequestException:
+        return []
+
+    if response.status_code != 200:
+        return []
+
+    items = []
+    for row in response.json().get("results", [])[:20]:
+        items.append(
+            {
+                "id": row.get("id"),
+                "title": row.get("title") or row.get("name"),
+                "overview": row.get("overview", "No description available."),
+                "year": (row.get("release_date") or row.get("first_air_date") or "")[:4],
+                "poster": (
+                    f"https://image.tmdb.org/t/p/w342{row['poster_path']}"
+                    if row.get("poster_path")
+                    else ""
+                ),
+                "provider": "tmdb",
+                "mediaType": media_type,
+            }
+        )
+    return items
+
+
+def search_books(query: str) -> list[dict[str, Any]]:
+    try:
+        response = requests.get(OPENLIBRARY_ENDPOINT, params={"q": query, "limit": 20}, timeout=12)
+    except requests.RequestException:
+        return []
+
+    if response.status_code != 200:
+        return []
+
+    items = []
+    for row in response.json().get("docs", [])[:20]:
+        cover_id = row.get("cover_i")
+        items.append(
+            {
+                "id": row.get("key", "").replace("/works/", ""),
+                "title": row.get("title", "Unknown title"),
+                "overview": ", ".join(row.get("author_name", [])[:2]) or "Unknown author",
+                "year": str(row.get("first_publish_year", "")),
+                "poster": f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg" if cover_id else "",
+                "provider": "openlibrary",
+                "mediaType": "books",
+            }
+        )
+    return items
+
+
+def search_audiobooks(query: str) -> list[dict[str, Any]]:
+    try:
+        response = requests.get(
+            GOOGLE_BOOKS_ENDPOINT,
+            params={"q": f"{query} audiobook", "maxResults": 20},
+            timeout=12,
+        )
+    except requests.RequestException:
+        return []
+
+    if response.status_code != 200:
         return []
 
     items = []
@@ -79,16 +391,11 @@ def login() -> Any:
 def request_item() -> Any:
     payload = request.get_json(silent=True) or {}
     media_type = payload.get("mediaType")
+    app.logger.info("Request submission media_type=%s id=%s", media_type, payload.get("id"))
 
-    if media_type in {"movies", "tv"}:
-        return send_to_jellyseerr(payload)
     if media_type == "movies":
-        if JELLYSEERR_URL and JELLYSEERR_API_KEY:
-            return send_to_jellyseerr(payload)
         return send_to_radarr(payload)
     if media_type == "tv":
-        if JELLYSEERR_URL and JELLYSEERR_API_KEY:
-            return send_to_jellyseerr(payload)
         return send_to_sonarr(payload)
     if media_type == "books":
         return send_to_lazylibrarian(payload)
@@ -98,158 +405,186 @@ def request_item() -> Any:
     return api_error("Unsupported media type", 400)
 
 
-def send_to_jellyseerr(item: dict[str, Any]) -> Any:
-    if not JELLYSEERR_URL or not JELLYSEERR_API_KEY:
-        return api_error("Jellyseerr is not configured", 400)
-
-    media_type = "movie" if item.get("mediaType") == "movies" else "tv"
-    payload = {
-        "mediaType": media_type,
-        "mediaId": item.get("id"),
-        "seasons": "all" if media_type == "tv" else None,
-    }
-
-    try:
-        response = requests.post(
-            f"{JELLYSEERR_URL}/api/v1/request",
-            json=payload,
-            headers={"X-Api-Key": JELLYSEERR_API_KEY},
-            timeout=12,
-        )
-    except requests.RequestException as exc:
-        return api_error("Jellyseerr request failed", 502, str(exc))
-
-    if response.status_code not in {200, 201}:
-        return api_error("Jellyseerr request failed", 400, response.text)
-
-    return jsonify({"ok": True, "target": "jellyseerr"})
-
-
-def _arr_base_url(url: str) -> str:
-    cleaned = url.rstrip("/")
-    if cleaned.endswith("/api/v3"):
-        return cleaned[: -len("/api/v3")]
-    if cleaned.endswith("/api"):
-        return cleaned[: -len("/api")]
-    return cleaned
-
-
-def _arr_headers(api_key: str) -> dict[str, str]:
-    return {"X-Api-Key": api_key, "Content-Type": "application/json"}
-
-
-def _int_or_none(raw: str) -> int | None:
-    raw = str(raw or "").strip()
-    return int(raw) if raw.isdigit() else None
-
-
 def send_to_radarr(item: dict[str, Any]) -> Any:
     if not RADARR_URL or not RADARR_API_KEY:
         return api_error("Radarr is not configured", 400)
 
-    base_url = _arr_base_url(RADARR_URL)
-    headers = _arr_headers(RADARR_API_KEY)
+    try:
+        media_id = int(item.get("id"))
+    except (TypeError, ValueError):
+        return api_error("Invalid movie id for Radarr request", 400, str(item.get("id")))
 
-    quality_profile_id = _int_or_none(RADARR_QUALITY_PROFILE_ID)
-    root_folder_path = RADARR_ROOT_FOLDER_PATH.strip()
+    # Use environment variable for quality profile if provided, otherwise fetch from Radarr
+    if RADARR_QUALITY_PROFILE_ID:
+        try:
+            quality_profile_id = int(RADARR_QUALITY_PROFILE_ID)
+        except ValueError:
+            return api_error("Invalid RADARR_QUALITY_PROFILE_ID environment variable", 400, RADARR_QUALITY_PROFILE_ID)
+    else:
+        quality_profile_id, quality_err = fetch_arr_quality_profile_id(RADARR_URL, RADARR_API_KEY, "Radarr")
+        if quality_profile_id is None:
+            app.logger.warning("Unable to resolve Radarr quality profile, falling back to id=1: %s", quality_err)
+            quality_profile_id = 1
+
+    # Use environment variable for root folder if provided, otherwise fetch from Radarr
+    if RADARR_ROOT_FOLDER:
+        root_folder_path = RADARR_ROOT_FOLDER
+        app.logger.info("Using configured Radarr root folder: %s", root_folder_path)
+    else:
+        root_folder_path, root_err = fetch_arr_root_folder_path(RADARR_URL, RADARR_API_KEY, "Radarr")
+        if root_folder_path is None:
+            return api_error("Unable to resolve Radarr root folder", 400, root_err)
+
+    payload: dict[str, Any] = {
+        "tmdbId": media_id,
+        "title": item.get("title") or "",
+        "qualityProfileId": quality_profile_id,
+        "rootFolderPath": root_folder_path,
+        "monitored": True,
+        "addOptions": {"searchForMovie": True},
+    }
+
+    app.logger.info("Submitting Radarr payload tmdb_id=%s", media_id)
 
     try:
-        if quality_profile_id is None:
-            qp_response = requests.get(f"{base_url}/api/v3/qualityprofile", headers=headers, timeout=12)
-            if qp_response.status_code == 200 and qp_response.json():
-                quality_profile_id = qp_response.json()[0].get("id")
-
-        if not root_folder_path:
-            folder_response = requests.get(f"{base_url}/api/v3/rootfolder", headers=headers, timeout=12)
-            if folder_response.status_code == 200 and folder_response.json():
-                root_folder_path = folder_response.json()[0].get("path", "")
-
-        if quality_profile_id is None or not root_folder_path:
-            return api_error(
-                "Radarr request failed",
-                400,
-                "Could not determine Radarr quality profile or root folder. "
-                "Set RADARR_QUALITY_PROFILE_ID and RADARR_ROOT_FOLDER_PATH.",
-            )
-
         response = requests.post(
-            f"{base_url}/api/v3/movie",
-            json={
-                "tmdbId": item.get("id"),
-                "qualityProfileId": quality_profile_id,
-                "rootFolderPath": root_folder_path,
-                "title": item.get("title"),
-                "monitored": True,
-                "addOptions": {"searchForMovie": True},
-            },
-            headers=headers,
+            f"{RADARR_URL}/api/v3/movie",
+            json=payload,
+            headers={"X-Api-Key": RADARR_API_KEY},
             timeout=12,
         )
     except requests.RequestException as exc:
         return api_error("Radarr request failed", 502, str(exc))
 
-    if response.status_code not in {200, 201}:
-        return api_error("Radarr request failed", 400, response.text)
+    if response.status_code == 409:
+        # Try to get more details about the existing movie
+        try:
+            error_data = response.json()
+            # Check if it's a validation error with specific message
+            if isinstance(error_data, list):
+                for error in error_data:
+                    if error.get('propertyName') == 'TmdbId' and 'already been added' in error.get('errorMessage', ''):
+                        return api_error(
+                            f"✨ '{item.get('title')}' is already in your Radarr library! ✨", 
+                            409, 
+                            "This movie has already been added. Check your existing library!"
+                        )
+            return api_error(
+                f"📽️ '{item.get('title')}' already exists in Radarr", 
+                409, 
+                response_details(response)
+            )
+        except:
+            return api_error(
+                f"📽️ '{item.get('title')}' already exists in Radarr", 
+                409, 
+                response_details(response)
+            )
 
-    return jsonify({"ok": True, "target": "radarr"})
+    if response.status_code not in {200, 201}:
+        return api_error("Radarr request failed", 400, response_details(response))
+
+    app.logger.info("Request sent to Radarr tmdb_id=%s", media_id)
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Radarr!", "radarr")
 
 
 def send_to_sonarr(item: dict[str, Any]) -> Any:
     if not SONARR_URL or not SONARR_API_KEY:
         return api_error("Sonarr is not configured", 400)
 
-    base_url = _arr_base_url(SONARR_URL)
-    headers = _arr_headers(SONARR_API_KEY)
+    try:
+        media_id = int(item.get("id"))
+    except (TypeError, ValueError):
+        return api_error("Invalid show id for Sonarr request", 400, str(item.get("id")))
 
-    quality_profile_id = _int_or_none(SONARR_QUALITY_PROFILE_ID)
-    language_profile_id = _int_or_none(SONARR_LANGUAGE_PROFILE_ID)
-    root_folder_path = SONARR_ROOT_FOLDER_PATH.strip()
+    lookup_term = f"tmdb:{media_id}"
+    try:
+        lookup_response = requests.get(
+            f"{SONARR_URL}/api/v3/series/lookup",
+            params={"term": lookup_term},
+            headers={"X-Api-Key": SONARR_API_KEY},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return api_error("Sonarr lookup failed", 502, str(exc))
+
+    if lookup_response.status_code != 200:
+        return api_error("Sonarr lookup failed", 400, response_details(lookup_response))
+
+    lookup_items = lookup_response.json()
+    selected = next((row for row in lookup_items if row.get("tmdbId") == media_id), None)
+    if not selected and lookup_items:
+        selected = lookup_items[0]
+    if not selected:
+        return api_error("Unable to map TMDB show to Sonarr series", 404, lookup_term)
+
+    # Use environment variable for quality profile if provided, otherwise fetch from Sonarr
+    if SONARR_QUALITY_PROFILE_ID:
+        try:
+            quality_profile_id = int(SONARR_QUALITY_PROFILE_ID)
+        except ValueError:
+            return api_error("Invalid SONARR_QUALITY_PROFILE_ID environment variable", 400, SONARR_QUALITY_PROFILE_ID)
+    else:
+        quality_profile_id, quality_err = fetch_arr_quality_profile_id(SONARR_URL, SONARR_API_KEY, "Sonarr")
+        if quality_profile_id is None:
+            app.logger.warning("Unable to resolve Sonarr quality profile, falling back to id=1: %s", quality_err)
+            quality_profile_id = 1
+
+    # Use environment variable for root folder if provided, otherwise fetch from Sonarr
+    if SONARR_ROOT_FOLDER:
+        root_folder_path = SONARR_ROOT_FOLDER
+        app.logger.info("Using configured Sonarr root folder: %s", root_folder_path)
+    else:
+        root_folder_path, root_err = fetch_arr_root_folder_path(SONARR_URL, SONARR_API_KEY, "Sonarr")
+        if root_folder_path is None:
+            return api_error("Unable to resolve Sonarr root folder", 400, root_err)
+
+    selected["qualityProfileId"] = quality_profile_id
+    selected["rootFolderPath"] = root_folder_path
+    selected["monitored"] = True
+    selected["addOptions"] = {"searchForMissingEpisodes": True}
+
+    app.logger.info("Submitting Sonarr payload tmdb_id=%s tvdb_id=%s", media_id, selected.get("tvdbId"))
 
     try:
-        if quality_profile_id is None:
-            qp_response = requests.get(f"{base_url}/api/v3/qualityprofile", headers=headers, timeout=12)
-            if qp_response.status_code == 200 and qp_response.json():
-                quality_profile_id = qp_response.json()[0].get("id")
-
-        if language_profile_id is None:
-            lp_response = requests.get(f"{base_url}/api/v3/languageprofile", headers=headers, timeout=12)
-            if lp_response.status_code == 200 and lp_response.json():
-                language_profile_id = lp_response.json()[0].get("id")
-
-        if not root_folder_path:
-            folder_response = requests.get(f"{base_url}/api/v3/rootfolder", headers=headers, timeout=12)
-            if folder_response.status_code == 200 and folder_response.json():
-                root_folder_path = folder_response.json()[0].get("path", "")
-
-        if quality_profile_id is None or language_profile_id is None or not root_folder_path:
-            return api_error(
-                "Sonarr request failed",
-                400,
-                "Could not determine Sonarr profiles or root folder. "
-                "Set SONARR_QUALITY_PROFILE_ID, SONARR_LANGUAGE_PROFILE_ID, and SONARR_ROOT_FOLDER_PATH.",
-            )
-
         response = requests.post(
-            f"{base_url}/api/v3/series",
-            json={
-                "tmdbId": item.get("id"),
-                "qualityProfileId": quality_profile_id,
-                "languageProfileId": language_profile_id,
-                "rootFolderPath": root_folder_path,
-                "title": item.get("title"),
-                "monitored": True,
-                "addOptions": {"searchForMissingEpisodes": True},
-            },
-            headers=headers,
+            f"{SONARR_URL}/api/v3/series",
+            json=selected,
+            headers={"X-Api-Key": SONARR_API_KEY},
             timeout=12,
         )
     except requests.RequestException as exc:
         return api_error("Sonarr request failed", 502, str(exc))
 
-    if response.status_code not in {200, 201}:
-        return api_error("Sonarr request failed", 400, response.text)
+    if response.status_code == 409:
+        # Try to get more details about the existing series
+        try:
+            error_data = response.json()
+            if isinstance(error_data, list):
+                for error in error_data:
+                    if error.get('propertyName') == 'Title' and 'already exists' in error.get('errorMessage', ''):
+                        return api_error(
+                            f"📺 '{item.get('title')}' is already in your Sonarr library! 📺", 
+                            409, 
+                            "This TV show has already been added. Check your existing library!"
+                        )
+            return api_error(
+                f"📺 '{item.get('title')}' already exists in Sonarr", 
+                409, 
+                response_details(response)
+            )
+        except:
+            return api_error(
+                f"📺 '{item.get('title')}' already exists in Sonarr", 
+                409, 
+                response_details(response)
+            )
 
-    return jsonify({"ok": True, "target": "sonarr"})
+    if response.status_code not in {200, 201}:
+        return api_error("Sonarr request failed", 400, response_details(response))
+
+    app.logger.info("Request sent to Sonarr tmdb_id=%s", media_id)
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Sonarr!", "sonarr")
 
 
 def send_to_lazylibrarian(item: dict[str, Any]) -> Any:
@@ -273,7 +608,39 @@ def send_to_lazylibrarian(item: dict[str, Any]) -> Any:
     if response.status_code != 200:
         return api_error("LazyLibrarian request failed", 400, response.text)
 
-    return jsonify({"ok": True, "target": "lazylibrarian"})
+    app.logger.info("Request sent to LazyLibrarian id=%s", item.get("id"))
+    return api_success(f"✅ Successfully added '{item.get('title')}' to LazyLibrarian!", "lazylibrarian")
 
 
 def send_to_listenarr(item: dict[str, Any]) -> Any:
+    if not LISTENARR_URL or not LISTENARR_API_KEY:
+        return api_error("Listenarr is not configured", 400)
+
+    try:
+        response = requests.post(
+            f"{LISTENARR_URL}/api/v1/wanted",
+            json={"foreignId": item.get("id"), "title": item.get("title")},
+            headers={"X-Api-Key": LISTENARR_API_KEY},
+            timeout=12,
+        )
+    except requests.RequestException as exc:
+        return api_error("Listenarr request failed", 502, str(exc))
+
+    if response.status_code not in {200, 201, 202}:
+        return api_error("Listenarr request failed", 400, response.text)
+
+    app.logger.info("Request sent to Listenarr id=%s", item.get("id"))
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Listenarr!", "listenarr")
+
+
+if __name__ == "__main__":
+    app.logger.info(
+        "Starting PoopRequests server on 0.0.0.0:8080 log_level=%s log_to_file=%s log_path=%s/%s puid=%s pgid=%s",
+        LOG_LEVEL,
+        LOG_TO_FILE,
+        LOG_DIR,
+        LOG_FILE_NAME,
+        PUID or "<unset>",
+        PGID or "<unset>",
+    )
+    app.run(host="0.0.0.0", port=8080, debug=False)
