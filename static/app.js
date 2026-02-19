@@ -89,7 +89,16 @@ async function login() {
 
 function sanitizePosterUrl(value) {
   const poster = String(value || '').trim();
-  if (!poster || poster === '${poster}' || poster.includes('${')) {
+  if (!poster) {
+    return '';
+  }
+
+  const lowerPoster = poster.toLowerCase();
+  if (
+    lowerPoster === '${poster}' ||
+    lowerPoster === '/${poster}' ||
+    lowerPoster.includes('/${poster}')
+  ) {
     return '';
   }
 
