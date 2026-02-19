@@ -96,15 +96,13 @@ OPENLIBRARY_ENDPOINT = "https://openlibrary.org/search.json"
 
 RADARR_URL = os.getenv("RADARR_URL", "").rstrip("/")
 RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
-# Removed RADARR_SEARCH_ON_ADD env variable
-RADARR_ROOT_FOLDER = os.getenv("RADARR_ROOT_FOLDER", "")  # Optional override for Radarr root folder
-RADARR_QUALITY_PROFILE_ID = os.getenv("RADARR_QUALITY_PROFILE_ID", "")  # Optional override for quality profile ID
+RADARR_ROOT_FOLDER = os.getenv("RADARR_ROOT_FOLDER", "")
+RADARR_QUALITY_PROFILE_ID = os.getenv("RADARR_QUALITY_PROFILE_ID", "")
 
 SONARR_URL = os.getenv("SONARR_URL", "").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
-# Removed SONARR_SEARCH_ON_ADD env variable
-SONARR_ROOT_FOLDER = os.getenv("SONARR_ROOT_FOLDER", "")  # Optional override for Sonarr root folder
-SONARR_QUALITY_PROFILE_ID = os.getenv("SONARR_QUALITY_PROFILE_ID", "")  # Optional override for quality profile ID
+SONARR_ROOT_FOLDER = os.getenv("SONARR_ROOT_FOLDER", "")
+SONARR_QUALITY_PROFILE_ID = os.getenv("SONARR_QUALITY_PROFILE_ID", "")
 
 LAZYLIBRARIAN_URL = os.getenv("LAZYLIBRARIAN_URL", "").rstrip("/")
 LAZYLIBRARIAN_API_KEY = os.getenv("LAZYLIBRARIAN_API_KEY", "")
@@ -118,6 +116,13 @@ def api_error(message: str, status: int = 400, details: str | None = None) -> tu
         payload["details"] = details
     app.logger.warning("API error status=%s message=%s details=%s", status, message, details or "")
     return jsonify(payload), status
+
+
+def api_success(message: str, target: str, data: dict | None = None) -> tuple[Any, int]:
+    payload = {"ok": True, "target": target, "message": message}
+    if data:
+        payload.update(data)
+    return jsonify(payload), 200
 
 
 def response_details(response: requests.Response) -> str:
@@ -141,9 +146,14 @@ def fetch_arr_quality_profile_id(arr_url: str, api_key: str, service_name: str) 
         return None, str(exc)
 
     if response.status_code != 200:
-        return None, response_details(response)
+        return None, f"HTTP {response.status_code}: {response.text[:200]}"
 
-    raw_profiles = response.json()
+    try:
+        raw_profiles = response.json()
+    except ValueError as e:
+        app.logger.error(f"Invalid JSON from {service_name} qualityprofile endpoint: {response.text[:500]}")
+        return None, f"Invalid JSON response: {str(e)}"
+
     profiles = raw_profiles if isinstance(raw_profiles, list) else raw_profiles.get("records", []) if isinstance(raw_profiles, dict) else []
     if not isinstance(profiles, list) or not profiles:
         return None, f"No quality profiles returned by {service_name}"
@@ -175,9 +185,14 @@ def fetch_arr_root_folder_path(arr_url: str, api_key: str, service_name: str) ->
         return None, str(exc)
 
     if response.status_code != 200:
-        return None, response_details(response)
+        return None, f"HTTP {response.status_code}: {response.text[:200]}"
 
-    folders = response.json()
+    try:
+        folders = response.json()
+    except ValueError as e:
+        app.logger.error(f"Invalid JSON from {service_name} rootfolder endpoint: {response.text[:500]}")
+        return None, f"Invalid JSON response: {str(e)}"
+
     if not isinstance(folders, list) or not folders:
         return None, f"No root folders returned by {service_name}"
 
@@ -406,7 +421,7 @@ def send_to_radarr(item: dict[str, Any]) -> Any:
         "qualityProfileId": quality_profile_id,
         "rootFolderPath": root_folder_path,
         "monitored": True,
-        "addOptions": {"searchForMovie": True},  # Hardcoded to True
+        "addOptions": {"searchForMovie": True},
     }
 
     app.logger.info("Submitting Radarr payload tmdb_id=%s", media_id)
@@ -422,13 +437,35 @@ def send_to_radarr(item: dict[str, Any]) -> Any:
         return api_error("Radarr request failed", 502, str(exc))
 
     if response.status_code == 409:
-        return api_error("Movie already exists or is already monitored in Radarr", 409, response_details(response))
+        # Try to get more details about the existing movie
+        try:
+            error_data = response.json()
+            # Check if it's a validation error with specific message
+            if isinstance(error_data, list):
+                for error in error_data:
+                    if error.get('propertyName') == 'TmdbId' and 'already been added' in error.get('errorMessage', ''):
+                        return api_error(
+                            f"✨ '{item.get('title')}' is already in your Radarr library! ✨", 
+                            409, 
+                            "This movie has already been added. Check your existing library!"
+                        )
+            return api_error(
+                f"📽️ '{item.get('title')}' already exists in Radarr", 
+                409, 
+                response_details(response)
+            )
+        except:
+            return api_error(
+                f"📽️ '{item.get('title')}' already exists in Radarr", 
+                409, 
+                response_details(response)
+            )
 
     if response.status_code not in {200, 201}:
         return api_error("Radarr request failed", 400, response_details(response))
 
     app.logger.info("Request sent to Radarr tmdb_id=%s", media_id)
-    return jsonify({"ok": True, "target": "radarr"})
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Radarr!", "radarr")
 
 
 def send_to_sonarr(item: dict[str, Any]) -> Any:
@@ -485,7 +522,7 @@ def send_to_sonarr(item: dict[str, Any]) -> Any:
     selected["qualityProfileId"] = quality_profile_id
     selected["rootFolderPath"] = root_folder_path
     selected["monitored"] = True
-    selected["addOptions"] = {"searchForMissingEpisodes": True}  # Hardcoded to True
+    selected["addOptions"] = {"searchForMissingEpisodes": True}
 
     app.logger.info("Submitting Sonarr payload tmdb_id=%s tvdb_id=%s", media_id, selected.get("tvdbId"))
 
@@ -500,13 +537,34 @@ def send_to_sonarr(item: dict[str, Any]) -> Any:
         return api_error("Sonarr request failed", 502, str(exc))
 
     if response.status_code == 409:
-        return api_error("Series already exists or is already monitored in Sonarr", 409, response_details(response))
+        # Try to get more details about the existing series
+        try:
+            error_data = response.json()
+            if isinstance(error_data, list):
+                for error in error_data:
+                    if error.get('propertyName') == 'Title' and 'already exists' in error.get('errorMessage', ''):
+                        return api_error(
+                            f"📺 '{item.get('title')}' is already in your Sonarr library! 📺", 
+                            409, 
+                            "This TV show has already been added. Check your existing library!"
+                        )
+            return api_error(
+                f"📺 '{item.get('title')}' already exists in Sonarr", 
+                409, 
+                response_details(response)
+            )
+        except:
+            return api_error(
+                f"📺 '{item.get('title')}' already exists in Sonarr", 
+                409, 
+                response_details(response)
+            )
 
     if response.status_code not in {200, 201}:
         return api_error("Sonarr request failed", 400, response_details(response))
 
     app.logger.info("Request sent to Sonarr tmdb_id=%s", media_id)
-    return jsonify({"ok": True, "target": "sonarr"})
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Sonarr!", "sonarr")
 
 
 def send_to_lazylibrarian(item: dict[str, Any]) -> Any:
@@ -531,7 +589,7 @@ def send_to_lazylibrarian(item: dict[str, Any]) -> Any:
         return api_error("LazyLibrarian request failed", 400, response.text)
 
     app.logger.info("Request sent to LazyLibrarian id=%s", item.get("id"))
-    return jsonify({"ok": True, "target": "lazylibrarian"})
+    return api_success(f"✅ Successfully added '{item.get('title')}' to LazyLibrarian!", "lazylibrarian")
 
 
 def send_to_listenarr(item: dict[str, Any]) -> Any:
@@ -552,7 +610,7 @@ def send_to_listenarr(item: dict[str, Any]) -> Any:
         return api_error("Listenarr request failed", 400, response.text)
 
     app.logger.info("Request sent to Listenarr id=%s", item.get("id"))
-    return jsonify({"ok": True, "target": "listenarr"})
+    return api_success(f"✅ Successfully added '{item.get('title')}' to Listenarr!", "listenarr")
 
 
 if __name__ == "__main__":
