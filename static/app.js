@@ -86,7 +86,7 @@ async function login() {
   }
 }
 
-function cardTemplate(item) {
+function resultCardTemplate(item) {
   const title = escapeHtml(item.title || 'Untitled');
   const year = escapeHtml(item.year || '');
   const overview = escapeHtml(item.overview || 'No description available.');
@@ -94,7 +94,7 @@ function cardTemplate(item) {
   const encodedItem = encodeURIComponent(JSON.stringify(item));
 
   return `
-    <article class="card">
+    <article class="result-card">
       <img class="poster" src="${poster}" alt="${title}" loading="lazy" onerror="this.style.display='none'" />
       <div class="card-content">
         <h4>${title} ${year ? `(${year})` : ''}</h4>
@@ -107,7 +107,7 @@ function cardTemplate(item) {
 
 function updateEmptyState(message = 'No results found.') {
   emptyState.textContent = message;
-  emptyState.classList.toggle('hidden', false);
+  emptyState.classList.remove('hidden');
 }
 
 async function runSearch() {
@@ -128,6 +128,7 @@ async function runSearch() {
 
   try {
     results.innerHTML = '<div class="loading">Searching...</div>';
+    emptyState.classList.add('hidden');
     
     const response = await fetch(`/api/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
     if (!response.ok) {
@@ -144,10 +145,10 @@ async function runSearch() {
     }
 
     emptyState.classList.add('hidden');
-    results.innerHTML = items.map(cardTemplate).join('');
+    results.innerHTML = items.map(resultCardTemplate).join('');
 
     results.querySelectorAll('button[data-item]').forEach((btn) => {
-      btn.addEventListener('click', () => submitRequest(btn.dataset.item));
+      btn.addEventListener('click', (event) => submitRequest(btn.dataset.item, event));
     });
   } catch (error) {
     results.innerHTML = '';
@@ -156,7 +157,7 @@ async function runSearch() {
   }
 }
 
-async function submitRequest(encodedItem) {
+async function submitRequest(encodedItem, event) {
   let item;
   try {
     item = JSON.parse(decodeURIComponent(encodedItem));
@@ -227,4 +228,4 @@ window.addEventListener('keydown', (event) => {
 });
 
 // Initialize empty state
-updateEmptyState('🔍 Start typing to search for movies, TV shows, or books.');
+updateEmptyState('🔍 Login and start typing to search for movies, TV shows, or books.');
