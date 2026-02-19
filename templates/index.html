@@ -1,47 +1,76 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PoopRequests</title>
-    <link rel="stylesheet" href="/static/style.css" />
-  </head>
-  <body>
-    <div class="bg-orb orb-one"></div>
-    <div class="bg-orb orb-two"></div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dyson's World - Requests</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+</head>
+<body>
+    <div class="container">
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal" aria-hidden="false">
+            <div class="modal-content">
+                <h2>Login to Jellyfin</h2>
+                <input type="text" id="username" placeholder="Username" autocomplete="username">
+                <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+                <div id="loginError" class="error"></div>
+                <button id="loginBtn">Login</button>
+            </div>
+        </div>
 
-    <div id="loginModal" class="modal">
-      <div class="modal-content glass">
-        <h2>Jellyfin Login</h2>
-        <p>Sign in to continue.</p>
-        <input type="text" id="username" placeholder="Username" autocomplete="username" />
-        <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
-        <button id="loginBtn">Login</button>
-        <p id="loginError"></p>
-      </div>
+        <!-- Main Content -->
+        <div id="mainContent">
+            <!-- Welcome Header -->
+            <div class="welcome-header">
+                <span id="welcome"></span>
+            </div>
+
+            <!-- Service Links Section -->
+            <div class="service-links">
+                <a href="https://watch.dysonsworld.com" target="_blank" rel="noopener noreferrer" class="service-card" style="background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('https://image.tmdb.org/t/p/original/wwemzKWzjKYJFfCeiB57q3r4Bcm.svg')">
+                    <span>Watch</span>
+                </a>
+                <a href="https://library.dysonsworld.com" target="_blank" rel="noopener noreferrer" class="service-card" style="background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80')">
+                    <span>Library</span>
+                </a>
+                <a href="https://emulation.dysonsworld.com" target="_blank" rel="noopener noreferrer" class="service-card" style="background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80')">
+                    <span>Emulation</span>
+                </a>
+            </div>
+
+            <!-- Requests Section -->
+            <div class="requests-section">
+                <h1 class="section-title">📺 Requests</h1>
+                
+                <!-- Search Controls -->
+                <div class="search-controls">
+                    <select id="mediaType" class="media-type">
+                        <option value="movies">Movies</option>
+                        <option value="tv">TV Shows</option>
+                        <option value="books">Books</option>
+                        <option value="audiobooks">Audiobooks</option>
+                    </select>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="Search for something..." 
+                        disabled
+                        class="search-input"
+                    >
+                </div>
+
+                <!-- Results Area -->
+                <div id="emptyState" class="empty-state"></div>
+                <div id="results" class="results-grid"></div>
+            </div>
+        </div>
     </div>
 
-    <header>
-      <h1>Requests</h1>
-      <p id="welcome">Find and request content in one click.</p>
-    </header>
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
 
-    <main class="glass">
-      <section class="controls">
-        <select id="mediaType">
-          <option value="movies">Movies</option>
-          <option value="tv">TV</option>
-          <option value="books">Books</option>
-          <option value="audiobooks">Audiobooks</option>
-        </select>
-        <input id="searchInput" type="text" placeholder="Search for media..." disabled />
-      </section>
-
-      <section id="results" class="cards"></section>
-      <p id="emptyState" class="empty">Start typing to search.</p>
-    </main>
-
-    <div id="toast"></div>
     <script src="/static/app.js"></script>
-  </body>
+</body>
 </html>
