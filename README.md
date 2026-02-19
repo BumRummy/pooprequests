@@ -26,6 +26,7 @@ Set these environment variables when running the container:
 - `LAZYLIBRARIAN_URL`, `LAZYLIBRARIAN_API_KEY`
 - `LISTENARR_URL`, `LISTENARR_API_KEY`
 - Search-on-add is always enabled for Radarr/Sonarr requests.
+- If quality profile lookup fails, the app falls back to profile id `1` for Radarr/Sonarr instead of failing the request immediately.
 - `LOG_LEVEL` (optional, default: `INFO`)
 - `LOG_TO_FILE` (optional, default: `true`)
 - `LOG_DIR` (optional, default: `/config`)

@@ -135,7 +135,8 @@ def fetch_arr_quality_profile_id(arr_url: str, api_key: str, service_name: str) 
     if response.status_code != 200:
         return None, response_details(response)
 
-    profiles = response.json()
+    raw_profiles = response.json()
+    profiles = raw_profiles if isinstance(raw_profiles, list) else raw_profiles.get("records", []) if isinstance(raw_profiles, dict) else []
     if not isinstance(profiles, list) or not profiles:
         return None, f"No quality profiles returned by {service_name}"
 
@@ -372,7 +373,8 @@ def send_to_radarr(item: dict[str, Any]) -> Any:
 
     quality_profile_id, quality_err = fetch_arr_quality_profile_id(RADARR_URL, RADARR_API_KEY, "Radarr")
     if quality_profile_id is None:
-        return api_error("Unable to resolve Radarr quality profile", 400, quality_err)
+        app.logger.warning("Unable to resolve Radarr quality profile, falling back to id=1: %s", quality_err)
+        quality_profile_id = 1
 
     root_folder_path, root_err = fetch_arr_root_folder_path(RADARR_URL, RADARR_API_KEY, "Radarr")
     if root_folder_path is None:
@@ -441,7 +443,8 @@ def send_to_sonarr(item: dict[str, Any]) -> Any:
 
     quality_profile_id, quality_err = fetch_arr_quality_profile_id(SONARR_URL, SONARR_API_KEY, "Sonarr")
     if quality_profile_id is None:
-        return api_error("Unable to resolve Sonarr quality profile", 400, quality_err)
+        app.logger.warning("Unable to resolve Sonarr quality profile, falling back to id=1: %s", quality_err)
+        quality_profile_id = 1
 
     root_folder_path, root_err = fetch_arr_root_folder_path(SONARR_URL, SONARR_API_KEY, "Sonarr")
     if root_folder_path is None:
