@@ -1,231 +1,571 @@
-const loginModal = document.getElementById('loginModal');
-const loginBtn = document.getElementById('loginBtn');
-const loginError = document.getElementById('loginError');
-const searchInput = document.getElementById('searchInput');
-const mediaType = document.getElementById('mediaType');
-const results = document.getElementById('results');
-const welcome = document.getElementById('welcome');
-const toast = document.getElementById('toast');
-const emptyState = document.getElementById('emptyState');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dyson's World - Requests</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-let authToken = '';
-let debounceTimer;
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(145deg, #0b0f1c 0%, #1a1f33 100%);
+            padding: 1.5rem;
+        }
 
-function showToast(message, isError = false, isWarning = false) {
-  toast.textContent = message;
-  
-  if (isError) {
-    toast.style.background = '#7f1d1d'; // Red for errors
-  } else if (isWarning) {
-    toast.style.background = '#854d0e'; // Amber/yellow for warnings (already exists)
-  } else {
-    toast.style.background = '#064e3b'; // Green for success
-  }
-  
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
-}
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+        h1 {
+            color: #f0eef7;
+            font-size: clamp(2.2rem, 8vw, 3.8rem);
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-shadow: 0 4px 15px rgba(0,0,0,0.6), 0 0 5px #9fa8da;
+            margin-bottom: 2.5rem;
+            word-break: break-word;
+            text-align: center;
+        }
 
-async function parseApiResponse(response) {
-  const raw = await response.text();
-  if (!raw) {
-    return {};
-  }
+        /* Service Links Section */
+        .service-links {
+            margin-bottom: 3rem;
+        }
 
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { error: raw };
-  }
-}
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.8rem;
+            justify-content: center;
+            margin-bottom: 1.8rem;
+        }
 
-async function login() {
-  const username = document.getElementById('username').value.trim();
-  const password = document.getElementById('password').value;
+        .button-grid.bottom-row {
+            grid-template-columns: repeat(2, 1fr);
+            max-width: 70%;
+            margin-left: auto;
+            margin-right: auto;
+        }
 
-  if (!username || !password) {
-    loginError.textContent = 'Username and password are required.';
-    return;
-  }
+        .card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem 0.8rem;
+            border-radius: 28px;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: #2f354a;
+            box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255,255,255,0.12);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            aspect-ratio: 3 / 1;
+            min-width: 0;
+            border: 1px solid rgba(255,255,255,0.15);
+            overflow: hidden;
+            text-decoration: none;
+            color: white;
+        }
 
-  loginBtn.disabled = true;
-  loginError.textContent = '';
+        .card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(0deg, rgba(10, 10, 25, 0.7) 0%, rgba(0, 0, 0, 0.3) 80%);
+            border-radius: 28px;
+            z-index: 1;
+            pointer-events: none;
+        }
 
-  try {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+        .card > * {
+            position: relative;
+            z-index: 2;
+        }
 
-    const data = await parseApiResponse(response);
-    if (!response.ok) {
-      throw new Error(data.error || 'Login failed');
-    }
+        .card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 28px 38px -10px black, 0 0 0 2px rgba(200, 210, 255, 0.5);
+            border-color: rgba(255,255,255,0.3);
+        }
 
-    authToken = data.token;
-    welcome.textContent = `Signed in as ${data.user}`;
-    loginModal.classList.add('hidden');
-    loginModal.style.display = 'none';
-    loginModal.setAttribute('aria-hidden', 'true');
-    searchInput.disabled = false;
-    searchInput.focus();
-  } catch (error) {
-    loginError.textContent = error.message;
-  } finally {
-    loginBtn.disabled = false;
-  }
-}
+        .service-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            line-height: 1.2;
+            text-shadow: 0 2px 8px black;
+            letter-spacing: 0.5px;
+            background: rgba(20, 20, 35, 0.5);
+            backdrop-filter: blur(4px);
+            padding: 0.3rem 1.2rem;
+            border-radius: 40px;
+            display: inline-block;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
 
-function resultCardTemplate(item) {
-  const title = escapeHtml(item.title || 'Untitled');
-  const year = escapeHtml(item.year || '');
-  const overview = escapeHtml(item.overview || 'No description available.');
-  const poster = escapeHtml(item.poster || '');
-  const encodedItem = encodeURIComponent(JSON.stringify(item));
+        /* Background classes */
+        .jellyfin-bg {
+            background-image: url('https://images.pexels.com/photos/3945317/pexels-photo-3945317.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load');
+        }
+        .library-bg {
+            background-image: url('https://images.pexels.com/photos/1370295/pexels-photo-1370295.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load');
+        }
+        .emulation-bg {
+            background-image: url('https://images.pexels.com/photos/3165335/pexels-photo-3165335.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load');
+        }
+        .immich-bg {
+            background-image: url('https://images.pexels.com/photos/1590549/pexels-photo-1590549.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load');
+        }
+        .jellyseer-bg {
+            background-image: url('https://images.pexels.com/photos/4377166/pexels-photo-4377166.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load');
+        }
 
-  return `
-    <article class="result-card">
-      <img class="poster" src="${poster}" alt="${title}" loading="lazy" onerror="this.style.display='none'" />
-      <div class="card-content">
-        <h4>${title} ${year ? `(${year})` : ''}</h4>
-        <p>${overview}</p>
-        <button data-item="${encodedItem}">➕ Add Request</button>
-      </div>
-    </article>
-  `;
-}
+        /* Requests Section */
+        .requests-section {
+            background: rgba(26, 31, 51, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 48px;
+            padding: 2.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+            margin-top: 2rem;
+        }
 
-function updateEmptyState(message = 'No results found.') {
-  emptyState.textContent = message;
-  emptyState.classList.remove('hidden');
-}
+        .section-title {
+            font-size: 2.5rem;
+            color: #f0eef7;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-weight: 600;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            letter-spacing: 1px;
+        }
 
-async function runSearch() {
-  const q = searchInput.value.trim();
-  if (q.length < 2) {
-    results.innerHTML = '';
-    updateEmptyState('🔍 Start typing to search for movies, TV shows, or books.');
-    return;
-  }
+        .welcome-header {
+            text-align: right;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            color: #b0b8d4;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
 
-  const type = mediaType.value;
-  const typeDisplay = {
-    'movies': 'movies',
-    'tv': 'TV shows',
-    'books': 'books',
-    'audiobooks': 'audiobooks'
-  }[type] || 'media';
+        .search-controls {
+            display: flex;
+            gap: 1rem;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
 
-  try {
-    results.innerHTML = '<div class="loading">Searching...</div>';
-    emptyState.classList.add('hidden');
-    
-    const response = await fetch(`/api/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
-    if (!response.ok) {
-      throw new Error('Search failed');
-    }
+        .media-type {
+            flex: 0 0 140px;
+            padding: 1rem 1.5rem;
+            border-radius: 40px;
+            background: rgba(10, 10, 25, 0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.5rem;
+        }
 
-    const payload = await parseApiResponse(response);
-    const items = Array.isArray(payload) ? payload : [];
+        .media-type:hover {
+            border-color: rgba(200, 210, 255, 0.5);
+            background-color: rgba(20, 20, 45, 0.9);
+        }
 
-    if (!items.length) {
-      results.innerHTML = '';
-      updateEmptyState(`😕 No ${typeDisplay} found matching "${escapeHtml(q)}".`);
-      return;
-    }
+        .search-input {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            border-radius: 40px;
+            background: rgba(10, 10, 25, 0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
 
-    emptyState.classList.add('hidden');
-    results.innerHTML = items.map(resultCardTemplate).join('');
+        .search-input:focus {
+            outline: none;
+            border-color: rgba(200, 210, 255, 0.8);
+            box-shadow: 0 0 0 3px rgba(200, 210, 255, 0.2);
+            background: rgba(15, 15, 35, 0.9);
+        }
 
-    results.querySelectorAll('button[data-item]').forEach((btn) => {
-      btn.addEventListener('click', (event) => submitRequest(btn.dataset.item, event));
-    });
-  } catch (error) {
-    results.innerHTML = '';
-    updateEmptyState('⚠️ Search unavailable right now.');
-    showToast(error.message, true);
-  }
-}
+        .search-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
 
-async function submitRequest(encodedItem, event) {
-  let item;
-  try {
-    item = JSON.parse(decodeURIComponent(encodedItem));
-  } catch {
-    showToast('❌ Unable to parse selected item.', true);
-    return;
-  }
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
 
-  // Disable the button temporarily to prevent double-clicks
-  const button = event?.target;
-  if (button) {
-    button.disabled = true;
-    button.textContent = '⏳ Adding...';
-  }
+        /* Results Grid */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
 
-  try {
-    const response = await fetch('/api/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item),
-    });
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #b0b8d4;
+            font-size: 1.2rem;
+            background: rgba(10, 10, 25, 0.3);
+            border-radius: 40px;
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            grid-column: 1 / -1;
+        }
 
-    const data = await parseApiResponse(response);
-    
-    if (!response.ok) {
-      // Check if it's a 409 (Conflict) which means already exists
-      if (response.status === 409) {
-        // Show a warning toast for existing items
-        showToast(data.error || `⚠️ '${item.title}' already exists!`, false, true);
-      } else {
-        throw new Error(data.error || 'Request failed');
-      }
-    } else {
-      // Success!
-      showToast(data.message || `✅ Added to ${data.target}`);
-    }
-  } catch (error) {
-    showToast(error.message, true);
-  } finally {
-    // Re-enable the button
-    if (button) {
-      button.disabled = false;
-      button.textContent = '➕ Add Request';
-    }
-  }
-}
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #9fa8da;
+            font-size: 1.2rem;
+            grid-column: 1 / -1;
+        }
 
-loginBtn.addEventListener('click', login);
+        /* Original Card Shape for Results */
+        .result-card {
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #404040;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+        }
 
-searchInput.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(runSearch, 300);
-});
+        .result-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            border-color: #4f46e5;
+        }
 
-mediaType.addEventListener('change', () => {
-  results.innerHTML = '';
-  if (searchInput.value.trim().length >= 2) {
-    runSearch();
-  } else {
-    updateEmptyState(`🔍 Start typing to search for ${mediaType.value}.`);
-  }
-});
+        .poster {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: #2d2d2d;
+        }
 
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !loginModal.classList.contains('hidden')) {
-    login();
-  }
-});
+        .card-content {
+            padding: 1.2rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
 
-// Initialize empty state
-updateEmptyState('🔍 Login and start typing to search for movies, TV shows, or books.');
+        .card-content h4 {
+            color: white;
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .card-content p {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+            flex: 1;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .card-content button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+            width: 100%;
+        }
+
+        .card-content button:hover:not(:disabled) {
+            background: #6366f1;
+            transform: translateY(-1px);
+        }
+
+        .card-content button:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: rgba(26, 31, 51, 0.95);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 350px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        /* Login Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .modal-content {
+            background: rgba(26, 31, 51, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 2.5rem;
+            border-radius: 48px;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 30px 50px -20px black;
+        }
+
+        .modal-content h2 {
+            color: white;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            font-size: 1.8rem;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 40px;
+            background: rgba(10, 10, 25, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: rgba(200, 210, 255, 0.8);
+            box-shadow: 0 0 0 3px rgba(200, 210, 255, 0.2);
+        }
+
+        .modal-content button {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 40px;
+            background: rgba(200, 210, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 1rem;
+        }
+
+        .modal-content button:hover:not(:disabled) {
+            background: rgba(200, 210, 255, 0.2);
+            border-color: rgba(200, 210, 255, 0.5);
+        }
+
+        .modal-content button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error {
+            color: #ff8a8a;
+            text-align: center;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 800px) {
+            .button-grid {
+                gap: 1.2rem;
+            }
+            .service-name {
+                font-size: 1.5rem;
+                padding: 0.2rem 1rem;
+            }
+            .search-controls {
+                flex-direction: column;
+            }
+            .media-type {
+                flex: 1;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .button-grid {
+                grid-template-columns: 1fr;
+                gap: 1.2rem;
+            }
+            .button-grid.bottom-row {
+                grid-template-columns: 1fr;
+                max-width: 100%;
+            }
+            .card {
+                aspect-ratio: 4 / 1;
+            }
+            h1 {
+                margin-bottom: 1.5rem;
+                font-size: 2rem;
+            }
+            .service-name {
+                font-size: 1.8rem;
+            }
+            .requests-section {
+                padding: 1.5rem;
+                border-radius: 32px;
+            }
+            .section-title {
+                font-size: 2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                aspect-ratio: 3 / 1;
+            }
+            .service-name {
+                font-size: 1.5rem;
+            }
+            .toast {
+                left: 1rem;
+                right: 1rem;
+                max-width: none;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <h2>🔐 Login to Jellyfin</h2>
+                <input type="text" id="username" placeholder="Username" autocomplete="username">
+                <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+                <div id="loginError" class="error"></div>
+                <button id="loginBtn">Login</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainContent">
+            <!-- Welcome Header -->
+            <div class="welcome-header">
+                <span id="welcome"></span>
+            </div>
+
+            <!-- Service Links Section -->
+            <h1>✨ Dyson's World ✨</h1>
+            
+            <div class="service-links">
+                <div class="button-grid">
+                    <a href="https://Watch.DysonsWorld.com" class="card jellyfin-bg" target="_blank" rel="noopener">
+                        <span class="service-name">🎬 Jellyfin</span>
+                    </a>
+                    <a href="https://Library.DysonsWorld.com" class="card library-bg" target="_blank" rel="noopener">
+                        <span class="service-name">📚 Library</span>
+                    </a>
+                    <a href="https://Emulation.DysonsWorld.com" class="card emulation-bg" target="_blank" rel="noopener">
+                        <span class="service-name">🕹️ Emulation</span>
+                    </a>
+                </div>
+
+                <div class="button-grid bottom-row">
+                    <a href="https://photos.DysonsWorld.com" class="card immich-bg" target="_blank" rel="noopener">
+                        <span class="service-name">📸 Immich</span>
+                    </a>
+                    <a href="https://requests.DysonsWorld.com" class="card jellyseer-bg" target="_blank" rel="noopener">
+                        <span class="service-name">✨ Requests</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Requests Section (Current Page) -->
+            <div class="requests-section">
+                <h2 class="section-title">📺 Make a Request</h2>
+                
+                <!-- Search Controls -->
+                <div class="search-controls">
+                    <select id="mediaType" class="media-type">
+                        <option value="movies">Movies</option>
+                        <option value="tv">TV Shows</option>
+                        <option value="books">Books</option>
+                        <option value="audiobooks">Audiobooks</option>
+                    </select>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="Search for movies, TV shows, books..." 
+                        disabled
+                        class="search-input"
+                    >
+                </div>
+
+                <!-- Results Area -->
+                <div id="emptyState" class="empty-state">🔍 Login and start typing to search</div>
+                <div id="results" class="results-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
